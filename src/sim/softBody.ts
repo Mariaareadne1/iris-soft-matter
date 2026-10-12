@@ -43,7 +43,10 @@ export interface SoftBodyMetrics {
 
 interface GrabRegion {
   indices: Uint32Array;
-  weights: Float32Array;
+  weightsPull: Float32Array;
+  weightsPress: Float32Array;
+  /** 0 = press profile, 1 = pull profile */
+  shape: number;
   /** particle positions relative to the anchor at grab time */
   offsets: Float32Array;
   anchor: Vec3;
@@ -59,7 +62,9 @@ const ROTATION_FREEDOM = 0.45;
 const ANCHOR = 0.86;
 const GRAB_PULL = 0.7;
 /** inner fraction of the grab radius that is held rigidly */
-const GRAB_CORE = 0.35;
+const GRAB_CORE = 0.18;
+/** press falloff radius relative to the grab radius */
+const PRESS_SPREAD = 1.45;
 const MAX_SPEED = 0.12; // body radii per substep
 /** deviation (body radii) beyond which the elastic return stops growing */
 const YIELD = 0.14;
@@ -158,30 +163,42 @@ export class SoftBody {
    * Attach the surface region around `point` (world space, on or near the
    * surface). Returns false when nothing is within reach.
    */
-  beginGrab(point: Vec3, radiusScale = 1): boolean {
+  beginGrab(point: Vec3, radiusScale = 1, shape = 1): boolean {
     const radius = this.coeffs.grabRadius * radiusScale;
+    const pressRadius = radius * PRESS_SPREAD;
     const p = this.positions;
-    const idx: number[] = [], w: number[] = [], off: number[] = [];
+    const idx: number[] = [], wPull: number[] = [], wPress: number[] = [], off: number[] = [];
     for (let i = 0; i < this.count; i++) {
       const dx = p[i * 3] - point.x, dy = p[i * 3 + 1] - point.y, dz = p[i * 3 + 2] - point.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d >= radius) continue;
-      // a held core (plateau) with a smooth shoulder: pulls come out as a
-      // rounded glob on a neck, not a cone
-      const t = Math.min(1, (1 - d / radius) / (1 - GRAB_CORE));
+      if (d >= pressRadius) continue;
+      // pull profile: a held core (plateau) with a smooth shoulder, so pulls
+      // come out as a rounded glob on a neck, not a cone
+      const t = Math.min(1, Math.max(0, 1 - d / radius) / (1 - GRAB_CORE));
+      // press profile: peaked and wider, so a push sinks a smooth bowl
+      // that eases into the surrounding surface without a rim crease
+      const s = 1 - d / pressRadius;
       idx.push(i);
-      w.push(t * t * (3 - 2 * t));
+      wPull.push(t * t * (3 - 2 * t));
+      wPress.push(s * s * s * (s * (6 * s - 15) + 10));
       off.push(dx, dy, dz);
     }
     if (idx.length === 0) return false;
     this.grab = {
       indices: new Uint32Array(idx),
-      weights: new Float32Array(w),
+      weightsPull: new Float32Array(wPull),
+      weightsPress: new Float32Array(wPress),
+      shape: Math.min(1, Math.max(0, shape)),
       offsets: new Float32Array(off),
       anchor: { ...point },
       target: { ...point },
     };
     return true;
+  }
+
+  /** Blend the grab profile: 0 = press (peaked bowl), 1 = pull (held glob). */
+  setGrabShape(shape: number) {
+    if (this.grab) this.grab.shape = Math.min(1, Math.max(0, shape));
   }
 
   /** Move the attachment; far pulls are softly limited so it can't tear. */
@@ -345,10 +362,11 @@ export class SoftBody {
     if (!g) return;
     const p = this.positions;
     const mx = g.target.x - g.anchor.x, my = g.target.y - g.anchor.y, mz = g.target.z - g.anchor.z;
+    const sh = g.shape;
     for (let k = 0; k < g.indices.length; k++) {
       const i = g.indices[k] * 3;
-      const w = g.weights[k];
-      const pull = GRAB_PULL * (0.25 + 0.75 * w);
+      const w = g.weightsPress[k] + (g.weightsPull[k] - g.weightsPress[k]) * sh;
+      const pull = GRAB_PULL * w * Math.sqrt(w);
       p[i] += (g.anchor.x + g.offsets[k * 3] + mx * w - p[i]) * pull;
       p[i + 1] += (g.anchor.y + g.offsets[k * 3 + 1] + my * w - p[i + 1]) * pull;
       p[i + 2] += (g.anchor.z + g.offsets[k * 3 + 2] + mz * w - p[i + 2]) * pull;

@@ -47,6 +47,7 @@ export class Interaction {
   private pointerTarget = new THREE.Vector3();
   private smoothed = new THREE.Vector3();
   private pressDepth = 0;
+  private shape = 0;
   private touched = false;
   private hoverQueued = false;
   private hovering = false;
@@ -85,8 +86,11 @@ export class Interaction {
       this.body.moveGrab(this.tmp);
       return;
     }
-    // dragging: the dent relaxes while the region trails the pointer
+    // dragging: the dent relaxes while the region trails the pointer, and
+    // the grip morphs from a fingertip press into a held pinch
     this.pressDepth *= Math.exp(-dt * 6);
+    this.shape = Math.min(1, this.shape + dt * 5);
+    this.body.setGrabShape(this.shape);
     const follow = THREE.MathUtils.lerp(16, 4.5, t.viscosity);
     this.smoothed.lerp(this.pointerTarget, 1 - Math.exp(-dt * follow));
     this.tmp.copy(this.smoothed).addScaledVector(this.inward, this.pressDepth);
@@ -110,7 +114,7 @@ export class Interaction {
     this.setNdc(e);
     const hit = this.raycast();
     if (!hit || !hit.face) return;
-    if (!this.body.beginGrab(hit.point)) return;
+    if (!this.body.beginGrab(hit.point, 1, 0)) return;
 
     this.state = 'pressing';
     this.pointerId = e.pointerId;
@@ -121,6 +125,7 @@ export class Interaction {
     this.hitPoint.copy(hit.point);
     this.inward.copy(hit.face.normal).transformDirection(this.mesh.matrixWorld).negate();
     this.pressDepth = 0;
+    this.shape = 0;
     this.pointerTarget.copy(hit.point);
     this.smoothed.copy(hit.point);
     const viewDir = new THREE.Vector3();

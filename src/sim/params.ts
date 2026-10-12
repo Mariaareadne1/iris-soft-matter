@@ -56,7 +56,7 @@ export function deriveCoefficients(raw: SlimeBehavior): PhysicalCoefficients {
     elasticFraction: lerp(0.08, 0.92, b.wobble),
     grabRadius: lerp(0.42, 0.68, b.softness),
     maxPressDepth: lerp(0.22, 0.5, b.softness),
-    surfaceTension: lerp(0.05, 0.025, b.softness),
+    surfaceTension: lerp(0.08, 0.045, b.softness),
     softReach: lerp(1.25, 2.5, b.stretchiness),
     maxReach: lerp(1.9, 3.8, b.stretchiness),
     edgeFlow: lerp(1.2, 8, b.stretchiness),
