@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vercel/
+.claude/
+tsconfig.tsbuildinfo
+.DS_Store
+test-results/
+playwright-report/
+captures/
+*.webm
+*.mp4
