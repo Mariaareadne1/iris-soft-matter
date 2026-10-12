@@ -3,7 +3,7 @@
 Living status file so any session can resume quickly. Newest information first.
 
 ## Current task
-Design refinement pass (materials, lighting, framing), then docs and deployment.
+Done for this session — live at https://mariaareadne1.github.io/iris-soft-matter/ . See "Remaining work" for ideas.
 
 ## Completed milestones
 | Commit | Milestone |
@@ -12,7 +12,11 @@ Design refinement pass (materials, lighting, framing), then docs and deployment.
 | `3b22103` | Volumetric soft body (XPBD edges + global volume + surface tension + anchored shape matching) with deterministic Vitest suite |
 | `d3f4a68` | Rendering (PN-refined surface, holo jelly shader, studio env, backdrop, shadow, post) + press / drag / poke interaction, viscoelastic edge flow |
 | `fbb3226` | Play bar, Studio panel, four presets on one blob, capture menu, wordmark, hint, metadata |
-| _next_ | Playwright E2E suite (16 tests), studio-aware framing |
+| `4f5edaf` | Playwright E2E suite (16 tests), studio-aware framing |
+| `baf147b` | Press/pull grab profiles, surface tension, material refinement, visual review scripts |
+| `197087d` | README, social image, touch icon, GitHub Pages workflow (deployed) |
+| `ee34e62` | Review fixes: WebGL context loss on dispose, safe pointer capture, recorder races, capped still size |
+| _latest_ | Load-tolerant E2E waits, demo test tracks peaks in-page, progress update |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -42,18 +46,23 @@ Design refinement pass (materials, lighting, framing), then docs and deployment.
   gradual release, drag outside canvas, press-and-hold squish, rough handling, reset, presets
   differ pairwise, studio wiring (physics + renderer + pixels), extreme sliders, PNG export,
   video export decodes in the browser, clean view, demo, embed in a resizable iframe, mobile
-  (Pixel 7) layout + touch tap + touch drag. **All pass.**
+  (Pixel 7) layout + touch tap + touch drag. **All 16 have passed on the final app code** —
+  16/16 in one run at `4f5edaf` under normal load; on `ee34e62`, under heavy machine load, 11 passed
+  in a full run and the other 5 (all wall-clock timeouts, no assertion failures) passed in targeted
+  re-runs after waits were made load-tolerant.
 
 ## Known issues / notes
+- Software GL (SwiftShader) is slow; on a heavily loaded machine (load avg 50–110 during this
+  session, from unrelated processes) several E2E tests timed out, so waits were made generous.
+  Every test has passed on the final code (see Tests above).
 - Software GL in CI renders ~5–10 fps, so E2E waits on simulation state, not wall time.
 - Bundle is ~700 kB (three.js); acceptable for a single-page experiment.
-- `og:image` uses a relative URL; set an absolute URL once the deploy domain is known.
+- `og:image` / `og:url` point at the GitHub Pages URL; change them if the site moves.
 
-## Remaining work
-- Design refinement pass (Clear Slime and Putty need more presence; tune idle motion).
-- Social preview image, apple-touch-icon.
-- README (setup, deploy, embed, credits), MP4 conversion note.
-- Deployment.
+## Remaining work (nice-to-have)
+- Run Playwright in CI (currently CI runs unit tests + build only; E2E is local).
+- Code-split three.js to shrink first load (~700 kB JS).
+- Optional: plastic memory presets (putty keeping a little of its shape), sound.
 
 ## Blocked
 - Nothing blocked. GitHub push works via `gh` credentials.

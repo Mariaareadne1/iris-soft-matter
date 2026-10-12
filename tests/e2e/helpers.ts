@@ -50,7 +50,7 @@ export async function openApp(page: Page, query = '') {
   await page.waitForFunction(() => {
     const w = window as unknown as Partial<IrisWindow>;
     return !!w.__iris && w.__iris.metrics().frames > 10;
-  }, undefined, { timeout: 30_000 });
+  }, undefined, { timeout: 150_000 });
   return errors;
 }
 
@@ -70,7 +70,7 @@ export async function waitFrames(page: Page, frames: number) {
   await page.waitForFunction(
     (target) => (window as unknown as IrisWindow).__iris.metrics().frames >= target,
     start + frames,
-    { timeout: 30_000 },
+    { timeout: 150_000 },
   );
 }
 

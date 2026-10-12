@@ -171,27 +171,37 @@ test.describe('capture', () => {
 
 test.describe('demo and embed', () => {
   test('show demo drives the real simulation and hands control back', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(420_000);
     await openApp(page);
     await page.getByRole('button', { name: 'Customize' }).click();
     await page.getByRole('button', { name: 'Show demo' }).click();
     expect((await inspect(page)).demoRunning).toBe(true);
-    let peak = 0;
-    let peakTop = 0;
-    const deadline = Date.now() + 80_000; // software GL runs the 10.5 s script slower
-    while (Date.now() < deadline && (await inspect(page)).demoRunning) {
-      const m = await metrics(page);
-      peak = Math.max(peak, m.maxDeviation);
-      peakTop = Math.max(peakTop, m.max.y);
-      await page.waitForTimeout(150);
-    }
-    expect(peak).toBeGreaterThan(0.6);
-    expect(peakTop).toBeGreaterThan(1.4);
-    expect((await inspect(page)).demoRunning).toBe(false);
+    // track the peak in-page (one rAF hook) instead of polling over CDP,
+    // which steals time from an already slow software renderer
+    await page.evaluate(() => {
+      const w = window as unknown as { __iris: { metrics(): { maxDeviation: number; max: { y: number } } }; __peak: { dev: number; top: number } };
+      w.__peak = { dev: 0, top: 0 };
+      const loop = () => {
+        const m = w.__iris.metrics();
+        w.__peak.dev = Math.max(w.__peak.dev, m.maxDeviation);
+        w.__peak.top = Math.max(w.__peak.top, m.max.y);
+        requestAnimationFrame(loop);
+      };
+      loop();
+    });
+    await page.waitForFunction(
+      () => !(window as unknown as { __iris: { inspect(): { demoRunning: boolean } } }).__iris.inspect().demoRunning,
+      undefined,
+      { timeout: 360_000, polling: 1000 },
+    );
+    const peak = await page.evaluate(() => (window as unknown as { __peak: { dev: number; top: number } }).__peak);
+    expect(peak.dev).toBeGreaterThan(0.6);
+    expect(peak.top).toBeGreaterThan(1.4);
     await settle(page, 0.08);
   });
 
   test('embed mode hides page chrome and fills its iframe', async ({ page }) => {
+    test.setTimeout(300_000);
     await openApp(page, '?embed=1');
     await expect(page.locator('.wordmark')).toHaveCount(0);
     await expect(page.locator('.playbar')).toHaveCount(0);
@@ -208,6 +218,6 @@ test.describe('demo and embed', () => {
     expect(Math.round(box!.height)).toBe(300);
     // resizing the iframe resizes the canvas
     await page.locator('#f').evaluate((el) => { (el as HTMLIFrameElement).style.width = '600px'; });
-    await expect.poll(async () => Math.round((await canvas.boundingBox())!.width)).toBe(600);
+    await expect.poll(async () => Math.round((await canvas.boundingBox())!.width), { timeout: 90_000 }).toBe(600);
   });
 });

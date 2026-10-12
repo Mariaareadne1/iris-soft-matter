@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { metrics, openApp, surfacePoint, waitFrames } from './helpers.ts';
 
 test('mobile: blob fits, controls fit, touch pokes and drags', async ({ page }) => {
+  test.setTimeout(300_000);
   await openApp(page);
   const vp = page.viewportSize()!;
   const bar = await page.locator('.playbar').boundingBox();
