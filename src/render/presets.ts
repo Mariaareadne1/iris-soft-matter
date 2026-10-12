@@ -21,6 +21,10 @@ export interface MaterialRecipe {
   dispersion: number;
   /** how strongly the base colour tints the body (vs. staying near-white) */
   tint: number;
+  /** glow of thick, face-on regions — light scattered inside the gel */
+  core: number;
+  /** absorption colour multiplier: < 1 deepens the colour seen through the body */
+  depth: number;
   envIntensity: number;
 }
 
@@ -40,27 +44,29 @@ export const PRESETS: Record<PresetId, Preset> = {
   jelly: {
     id: 'jelly',
     label: 'Holographic Jelly',
-    color: '#b8a6ff',
+    color: '#a58cff',
     iridescence: 0.85,
-    gloss: 0.85,
+    gloss: 0.88,
     behavior: { stretchiness: 0.62, viscosity: 0.45, softness: 0.55, wobble: 0.6, recovery: 0.45 },
     recipe: {
       metalness: 0,
       roughness: [0.42, 0.04],
-      transmission: 0.62,
+      transmission: 0.45,
       thickness: 2.2,
       ior: 1.38,
-      attenuationDistance: 0.75,
+      attenuationDistance: 0.6,
       clearcoat: 1,
-      sheen: 0.45,
+      sheen: 0.1,
       sheenColor: '#ffc8f0',
-      iridescence: 1,
-      holo: 1,
+      iridescence: 0.7,
+      holo: 1.6,
       dispersion: 0.25,
-      tint: 0.85,
+      tint: 1,
+      core: 0.5,
+      depth: 0.55,
       envIntensity: 1.1,
     },
-    swatch: 'conic-gradient(from 200deg, #b8a6ff, #8fd8ff, #ffb3e6, #b8a6ff)',
+    swatch: 'conic-gradient(from 200deg, #a58cff, #8fd8ff, #ffb3e6, #a58cff)',
   },
   chrome: {
     id: 'chrome',
@@ -83,7 +89,9 @@ export const PRESETS: Record<PresetId, Preset> = {
       holo: 0.35,
       dispersion: 0,
       tint: 1,
-      envIntensity: 1.25,
+      core: 0,
+      depth: 1,
+      envIntensity: 0.85,
     },
     swatch: 'linear-gradient(135deg, #f6f7fb, #8d93a6 45%, #e9ecf4 60%, #6b7085)',
   },
@@ -108,6 +116,8 @@ export const PRESETS: Record<PresetId, Preset> = {
       holo: 0.3,
       dispersion: 0,
       tint: 1,
+      core: 0.12,
+      depth: 1,
       envIntensity: 0.9,
     },
     swatch: 'radial-gradient(circle at 35% 30%, #fde3ee, #f3b9cf 55%, #d895b3)',
@@ -133,6 +143,8 @@ export const PRESETS: Record<PresetId, Preset> = {
       holo: 0.35,
       dispersion: 0.6,
       tint: 0.6,
+      core: 0.08,
+      depth: 0.9,
       envIntensity: 1.2,
     },
     swatch: 'radial-gradient(circle at 35% 30%, #ffffff, #d9f4ff 45%, #9fd6f0)',

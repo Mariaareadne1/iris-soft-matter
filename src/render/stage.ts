@@ -34,7 +34,7 @@ export class Stage {
     });
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(width, height);
-    this.renderer.toneMapping = THREE.AgXToneMapping;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
     const canvas = this.renderer.domElement;
     canvas.style.touchAction = 'none';
@@ -49,11 +49,11 @@ export class Stage {
     this.scene.environment = this.envTexture;
     this.scene.environmentRotation.set(0, 0.6, 0);
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    const key = new THREE.DirectionalLight(0xffffff, 0.7);
     key.position.set(-2.5, 4, 3.5);
-    const rimCool = new THREE.DirectionalLight(0x8fd8ff, 1.6);
+    const rimCool = new THREE.DirectionalLight(0x8fd8ff, 0.9);
     rimCool.position.set(-4, 1.5, -3);
-    const rimWarm = new THREE.DirectionalLight(0xff9ad5, 1.3);
+    const rimWarm = new THREE.DirectionalLight(0xff9ad5, 0.8);
     rimWarm.position.set(4.5, -0.5, -2.5);
     this.scene.add(key, rimCool, rimWarm);
 
@@ -77,7 +77,7 @@ export class Stage {
     this.composer.setPixelRatio(this.pixelRatio);
     this.composer.setSize(width, height);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.18, 0.55, 0.92);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.12, 0.5, 1.05);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.grain = new ShaderPass(GrainShader);
@@ -195,12 +195,12 @@ function buildStudioEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const env = new THREE.Scene();
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(12, 8, 12),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color('#2a2833'), side: THREE.BackSide }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#34313f'), side: THREE.BackSide }),
   );
   env.add(room);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(12, 12),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color('#141318') }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#1c1a24') }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -3.9;
@@ -221,6 +221,7 @@ function buildStudioEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   panel(3.5, 1, '#ff9fd6', 3.5, [2.5, -2, 5.9]); // low pink kicker
   panel(2.5, 2.5, '#ffffff', 2.2, [-2.5, 1.5, 5.9]); // front fill
   panel(6, 0.5, '#aeb8ff', 3, [0, 2.5, -5.9]); // back rim strip
+  panel(11, 0.35, '#e9e4ff', 1.6, [0, -0.6, -5.95]); // horizon line for chrome
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   const tex = pmrem.fromScene(env, 0.035).texture;

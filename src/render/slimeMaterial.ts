@@ -14,6 +14,8 @@ export interface SlimeUniforms {
   uTime: THREE.IUniform<number>;
   uBandFreq: THREE.IUniform<number>;
   uStrainGlow: THREE.IUniform<number>;
+  uCore: THREE.IUniform<number>;
+  uCoreColor: THREE.IUniform<THREE.Color>;
   uPalA: THREE.IUniform<THREE.Color>;
   uPalB: THREE.IUniform<THREE.Color>;
   uPalC: THREE.IUniform<THREE.Color>;
@@ -57,6 +59,8 @@ export class SlimeMaterial {
       uTime: { value: 0 },
       uBandFreq: { value: 1.6 },
       uStrainGlow: { value: 1 },
+      uCore: { value: 0.5 },
+      uCoreColor: { value: new THREE.Color('#8f7bff') },
       uPalA: { value: new THREE.Color('#b8a6ff') },
       uPalB: { value: new THREE.Color('#7f95ff') },
       uPalC: { value: new THREE.Color('#86ecff') },
@@ -89,7 +93,10 @@ export class SlimeMaterial {
     m.transmission = r.transmission;
     m.thickness = r.thickness;
     m.ior = r.ior;
-    m.attenuationColor.copy(base);
+    // absorption: a deeper, more saturated version of the base colour
+    const hsl = { h: 0, s: 0, l: 0 };
+    base.getHSL(hsl);
+    m.attenuationColor.setHSL(hsl.h, Math.min(1, hsl.s * 1.15), hsl.l * r.depth);
     m.attenuationDistance = r.attenuationDistance;
     m.sheen = r.sheen;
     m.sheenColor.set(r.sheenColor);
@@ -97,6 +104,8 @@ export class SlimeMaterial {
     m.dispersion = r.dispersion;
     this.uniforms.uHolo.value = r.holo * irid;
     this.uniforms.uPalA.value.copy(base);
+    this.uniforms.uCore.value = r.core;
+    this.uniforms.uCoreColor.value.setHSL(hsl.h, Math.min(1, hsl.s * 1.1), Math.min(0.75, hsl.l * 0.85));
     this.envIntensity = r.envIntensity;
   }
 
@@ -114,6 +123,8 @@ uniform float uHolo;
 uniform float uTime;
 uniform float uBandFreq;
 uniform float uStrainGlow;
+uniform float uCore;
+uniform vec3 uCoreColor;
 uniform vec3 uPalA;
 uniform vec3 uPalB;
 uniform vec3 uPalC;
@@ -147,8 +158,17 @@ const HOLO_BODY = /* glsl */ `
     + strain * 0.8 * uStrainGlow;
   vec3 pal = filmRamp(film);
 
-  float energy = (0.06 + 0.94 * fres) + strain * 0.6 * uStrainGlow;
+  // studio light comes from above: the film glows less on the underside,
+  // which keeps the body reading as a volume rather than a flat disc
+  float up = 0.5 + 0.5 * normalize((vec4(normal, 0.0) * viewMatrix).xyz).y;
+  float shade = mix(0.45, 1.0, up);
+  float energy = ((0.14 + 0.86 * fres) + strain * 0.6 * uStrainGlow) * shade;
   totalEmissiveRadiance += pal * uHolo * energy * 0.42;
+
+  // light scattered inside the gel: thick face-on regions glow softly,
+  // thinning (stretched) regions lose it
+  float thick = pow(facing, 1.6) * (1.0 - 0.6 * clamp(strain, 0.0, 1.0));
+  totalEmissiveRadiance += uCoreColor * uCore * thick * shade * 0.35;
 
   // the film also colours what the surface reflects, not just its glow
   vec3 tinted = diffuseColor.rgb * (0.6 + pal * 0.7);
