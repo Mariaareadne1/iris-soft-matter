@@ -119,6 +119,12 @@ export class SlimeApp {
     this.controls.update();
   }
 
+  /** Slide the blob out from under the studio panel on wide screens. */
+  setPanelOpen(open: boolean) {
+    const { width } = this.stage.size();
+    this.stage.viewShiftTarget = open && width > 900 ? 170 : 0;
+  }
+
   playDemo() {
     this.reset();
     this.interaction.enabled = false;
@@ -175,8 +181,29 @@ export class SlimeApp {
     return this.interaction.screenPointOf(world);
   }
 
-  meshTriangleCount() {
-    return (this.geometry.geometry.index?.count ?? 0) / 3;
+  /** Render + physics state, for tests that must prove a control is wired. */
+  inspect() {
+    const m = this.material.material;
+    let slimeMeshes = 0;
+    this.stage.scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o.name === 'slime') slimeMeshes++;
+    });
+    return {
+      preset: this.settings.preset,
+      background: this.settings.background,
+      slimeMeshes,
+      triangles: (this.geometry.geometry.index?.count ?? 0) / 3,
+      particles: this.body.count,
+      roughness: m.roughness,
+      metalness: m.metalness,
+      transmission: m.transmission,
+      iridescence: m.iridescence,
+      holo: this.material.uniforms.uHolo.value,
+      color: `#${m.attenuationColor.getHexString()}`,
+      coefficients: { ...this.body.coefficients },
+      demoRunning: this.demo.running,
+      recording: this.recorder.recording,
+    };
   }
 
   // ─── loop ───────────────────────────────────────────────────────────
@@ -200,6 +227,7 @@ export class SlimeApp {
     this.stage.updateShadow(m.min, m.max);
     this.stage.setTime(this.elapsed);
     this.material.uniforms.uTime.value = this.elapsed;
+    this.stage.updateFraming(dt);
     this.controls.update();
     this.stage.render();
   };

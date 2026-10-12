@@ -51,6 +51,10 @@ export function App() {
   }, [settings]);
 
   useEffect(() => {
+    appRef.current?.setPanelOpen(studioOpen && !clean && !recording);
+  }, [studioOpen, clean, recording]);
+
+  useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), TOAST_MS);
     return () => clearTimeout(t);

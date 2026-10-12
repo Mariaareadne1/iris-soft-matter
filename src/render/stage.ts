@@ -23,6 +23,9 @@ export class Stage {
   private shadow: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   private envTexture: THREE.Texture;
   private pixelRatio: number;
+  private viewShift = 0;
+  /** horizontal framing offset in CSS px (positive moves the subject left) */
+  viewShiftTarget = 0;
 
   constructor(private host: HTMLElement) {
     const { width, height } = this.size();
@@ -109,6 +112,7 @@ export class Stage {
     const { width, height } = this.size();
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.applyViewOffset();
     this.renderer.setSize(width, height);
     this.composer.setSize(width, height);
     this.backdrop.material.uniforms.uResolution.value.set(width, height);
@@ -146,6 +150,26 @@ export class Stage {
     // fainter as the base lifts off the floor
     const lift = Math.max(0, min.y + 1.32);
     this.shadow.material.uniforms.uLift.value = Math.min(1, lift / 1.2);
+  }
+
+  /** Ease the framing toward `viewShiftTarget` (e.g. to clear a side panel). */
+  updateFraming(dt: number) {
+    const next = this.viewShift + (this.viewShiftTarget - this.viewShift) * (1 - Math.exp(-dt * 7));
+    if (Math.abs(next - this.viewShift) < 0.05 && Math.abs(this.viewShiftTarget - next) < 0.05) {
+      if (this.viewShift !== this.viewShiftTarget) {
+        this.viewShift = this.viewShiftTarget;
+        this.applyViewOffset();
+      }
+      return;
+    }
+    this.viewShift = next;
+    this.applyViewOffset();
+  }
+
+  private applyViewOffset() {
+    const { width, height } = this.size();
+    if (Math.abs(this.viewShift) < 0.05) this.camera.clearViewOffset();
+    else this.camera.setViewOffset(width, height, this.viewShift, 0, width, height);
   }
 
   setTime(t: number) {
