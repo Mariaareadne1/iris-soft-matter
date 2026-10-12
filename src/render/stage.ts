@@ -12,6 +12,9 @@ import { GrainShader, BackdropShader, ShadowShader } from './shaders.ts';
  * environment for reflections, a gradient sweep backdrop with a soft haze
  * for the jelly to refract, a contact shadow, and restrained post.
  */
+/** ~24 MP: comfortably within GPU memory for the MSAA + bloom chain */
+const STILL_PIXEL_BUDGET = 24_000_000;
+
 export class Stage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -181,6 +184,15 @@ export class Stage {
     this.composer.render();
   }
 
+  /** Largest pixel ratio a still can use without exceeding GPU limits. */
+  maxStillRatio(wanted: number) {
+    const { width, height } = this.size();
+    const maxSide = Math.min(this.renderer.capabilities.maxTextureSize, 8192);
+    const byside = maxSide / Math.max(width, height);
+    const byArea = Math.sqrt(STILL_PIXEL_BUDGET / (width * height));
+    return Math.max(1, Math.min(wanted, byside, byArea));
+  }
+
   /** Temporarily raise the render resolution (for stills). */
   withPixelRatio<T>(ratio: number, fn: () => T): T {
     const { width, height } = this.size();
@@ -206,6 +218,7 @@ export class Stage {
     this.shadow.material.dispose();
     this.envTexture.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 }

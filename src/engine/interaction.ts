@@ -114,12 +114,21 @@ export class Interaction {
     this.setNdc(e);
     const hit = this.raycast();
     if (!hit || !hit.face) return;
-    if (!this.body.beginGrab(hit.point, 1, 0)) return;
+    // capture first: it throws for a pointer that is no longer active, and
+    // nothing below should run (or need undoing) in that case
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      return;
+    }
+    if (!this.body.beginGrab(hit.point, 1, 0)) {
+      this.canvas.releasePointerCapture(e.pointerId);
+      return;
+    }
 
     this.state = 'pressing';
     this.pointerId = e.pointerId;
     this.setOrbitEnabled(false);
-    this.canvas.setPointerCapture(e.pointerId);
     this.canvas.style.cursor = 'grabbing';
     this.downAt = { x: e.clientX, y: e.clientY, time: performance.now() / 1000 };
     this.hitPoint.copy(hit.point);

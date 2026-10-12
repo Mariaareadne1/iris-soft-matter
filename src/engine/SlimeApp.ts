@@ -142,7 +142,7 @@ export class SlimeApp {
 
   /** A high-resolution still of exactly what is on screen. */
   async screenshot(): Promise<Blob> {
-    const ratio = Math.max(STILL_PIXEL_RATIO, window.devicePixelRatio || 1);
+    const ratio = this.stage.maxStillRatio(Math.max(STILL_PIXEL_RATIO, window.devicePixelRatio || 1));
     // render and read back in the same task — the drawing buffer is not preserved
     const blobPromise = this.stage.withPixelRatio(ratio, () => {
       this.stage.render();

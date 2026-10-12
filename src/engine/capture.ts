@@ -82,11 +82,18 @@ export class ClipRecorder {
       this.rejectDone = reject;
     });
     rec.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
+      if (this.recorder === rec && e.data.size > 0) this.chunks.push(e.data);
     };
-    rec.onerror = () => this.finish(new Error('Recording failed'));
+    rec.onerror = () => {
+      if (this.recorder !== rec) return;
+      stream.getTracks().forEach((t) => t.stop());
+      rec.onstop = null;
+      if (rec.state !== 'inactive') rec.stop();
+      this.finish(new Error('Recording failed'));
+    };
     rec.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
+      if (this.recorder !== rec) return; // a stale recorder must not settle a newer clip
       const type = rec.mimeType || mimeType;
       const blob = new Blob(this.chunks, { type });
       this.finish(blob.size > 0 ? null : new Error('Recording produced no data'), {
@@ -107,6 +114,8 @@ export class ClipRecorder {
   }
 
   private finish(err: Error | null, result?: ClipResult) {
+    if (this.stopTimer !== null) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
     this.recorder = null;
     if (err) this.rejectDone?.(err);
     else if (result) this.resolveDone?.(result);
