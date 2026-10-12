@@ -103,7 +103,7 @@ export class Stage {
     const aspect = width / height;
     this.camera.aspect = aspect;
     const fit = aspect < 1 ? 1.1 / aspect : 1; // narrow screens back off
-    this.camera.position.set(0, 0.55, 8.1 * Math.min(fit, 1.75));
+    this.camera.position.set(0, 0.55, 7.6 * Math.min(fit, 1.8));
     this.camera.lookAt(0, -0.05, 0);
     this.camera.updateProjectionMatrix();
   }
@@ -123,7 +123,7 @@ export class Stage {
     const { width, height } = this.size();
     const aspect = width / height;
     const fit = aspect < 1 ? 1.1 / aspect : 1;
-    return new THREE.Vector3(0, 0.55, 8.1 * Math.min(fit, 1.75));
+    return new THREE.Vector3(0, 0.55, 7.6 * Math.min(fit, 1.8));
   }
 
   setBackdrop(b: Backdrop) {

@@ -24,6 +24,7 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const canRecord = useMemo(() => ClipRecorder.isSupported(), []);
+  const touchFirst = useMemo(() => window.matchMedia?.('(pointer: coarse)').matches ?? false, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -160,7 +161,7 @@ export function App() {
       )}
 
       <p className={`hint ${hintVisible && !demoRunning && chrome ? '' : 'is-hidden'}`} aria-live="polite">
-        Drag to stretch. Click to poke.
+        {touchFirst ? 'Drag to stretch. Tap to poke.' : 'Drag to stretch. Click to poke.'}
       </p>
 
       {showBar && (

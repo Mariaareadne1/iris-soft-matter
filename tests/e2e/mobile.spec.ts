@@ -15,6 +15,7 @@ test('mobile: blob fits, controls fit, touch pokes and drags', async ({ page }) 
   expect(right.x).toBeLessThan(vp.width);
   expect(right.x - left.x).toBeGreaterThan(vp.width * 0.4);
 
+  await expect(page.getByText('Drag to stretch. Tap to poke.')).toBeVisible();
   const p = await surfacePoint(page, { x: 0, y: 0.3, z: 1 });
   await page.touchscreen.tap(p.x, p.y);
   await waitFrames(page, 4);

@@ -47,11 +47,11 @@ export const BackdropShader = {
   },
   vertexShader: /* glsl */ `
     varying vec3 vDir;
-    varying vec2 vNdc;
+    varying vec3 vClip;
     void main() {
       vDir = normalize(position);
       vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      vNdc = clip.xy / clip.w;
+      vClip = clip.xyw;
       gl_Position = clip;
     }
   `,
@@ -63,13 +63,16 @@ export const BackdropShader = {
     uniform vec2 uResolution;
     uniform float uTime;
     varying vec3 vDir;
-    varying vec2 vNdc;
+    varying vec3 vClip;
     float bHash(vec2 p) {
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
       p3 += dot(p3, p3.yzx + 33.33);
       return fract((p3.x + p3.y) * p3.z);
     }
     void main() {
+      // clip coords interpolate exactly; dividing per pixel avoids the seams
+      // a per-vertex NDC varying leaves across the sphere's triangles
+      vec2 vNdc = vClip.xy / vClip.z;
       float t = smoothstep(-0.45, 0.65, vDir.y);
       vec3 col = mix(uBottom, uTop, t);
       float aspect = uResolution.x / max(uResolution.y, 1.0);
