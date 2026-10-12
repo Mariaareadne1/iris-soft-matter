@@ -8,6 +8,9 @@ import { extractRotation, quatScaleAngle, quatToMat3, type Quat } from './rotati
  * A closed triangulated surface of particles solved with small-step XPBD
  * (Macklin et al. 2019) at a fixed 120 Hz:
  *   - edge distance constraints (compliant → the surface can stretch)
+ *     whose rest lengths flow while held and creep back afterwards — a
+ *     Maxwell-style viscoelastic skin, so a released stretch sags home
+ *     instead of snapping
  *   - one global volume constraint (closed-mesh signed volume → it keeps
  *     its mass: dents bulge out elsewhere, stretches thin out)
  *   - laplacian surface tension (keeps the skin smooth, pulls tendrils in)
@@ -41,7 +44,9 @@ export interface SoftBodyMetrics {
 interface GrabRegion {
   indices: Uint32Array;
   weights: Float32Array;
+  /** particle positions relative to the anchor at grab time */
   offsets: Float32Array;
+  anchor: Vec3;
   target: Vec3;
 }
 
@@ -53,7 +58,11 @@ const ROTATION_FREEDOM = 0.45;
 /** how strongly the resting frame stays at the origin (1 = pinned) */
 const ANCHOR = 0.86;
 const GRAB_PULL = 0.7;
+/** inner fraction of the grab radius that is held rigidly */
+const GRAB_CORE = 0.35;
 const MAX_SPEED = 0.12; // body radii per substep
+/** deviation (body radii) beyond which the elastic return stops growing */
+const YIELD = 0.14;
 const BREATH_PERIOD = 5.2;
 const BREATH_AMOUNT = 0.012;
 
@@ -70,6 +79,7 @@ export class SoftBody {
 
   private prev: Float32Array;
   private edges: Uint32Array;
+  private edgeRest0: Float32Array;
   private edgeRest: Float32Array;
   private edgeLambda: Float32Array;
   private nbrStart: Uint32Array;
@@ -112,12 +122,13 @@ export class SoftBody {
     this.prev = new Float32Array(rest);
 
     const ne = this.edges.length / 2;
-    this.edgeRest = new Float32Array(ne);
+    this.edgeRest0 = new Float32Array(ne);
     this.edgeLambda = new Float32Array(ne);
     for (let e = 0; e < ne; e++) {
       const a = this.edges[e * 2] * 3, b = this.edges[e * 2 + 1] * 3;
-      this.edgeRest[e] = Math.hypot(rest[b] - rest[a], rest[b + 1] - rest[a + 1], rest[b + 2] - rest[a + 2]);
+      this.edgeRest0[e] = Math.hypot(rest[b] - rest[a], rest[b + 1] - rest[a + 1], rest[b + 2] - rest[a + 2]);
     }
+    this.edgeRest = new Float32Array(this.edgeRest0);
     this.idleScale = new Float32Array(this.count).fill(1);
     this.volGrad = new Float32Array(this.count * 3);
     this.restVolume = signedVolume(rest, this.triangles);
@@ -155,7 +166,9 @@ export class SoftBody {
       const dx = p[i * 3] - point.x, dy = p[i * 3 + 1] - point.y, dz = p[i * 3 + 2] - point.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d >= radius) continue;
-      const t = 1 - d / radius;
+      // a held core (plateau) with a smooth shoulder: pulls come out as a
+      // rounded glob on a neck, not a cone
+      const t = Math.min(1, (1 - d / radius) / (1 - GRAB_CORE));
       idx.push(i);
       w.push(t * t * (3 - 2 * t));
       off.push(dx, dy, dz);
@@ -165,6 +178,7 @@ export class SoftBody {
       indices: new Uint32Array(idx),
       weights: new Float32Array(w),
       offsets: new Float32Array(off),
+      anchor: { ...point },
       target: { ...point },
     };
     return true;
@@ -207,6 +221,7 @@ export class SoftBody {
   reset() {
     this.positions.set(this.rest);
     this.prev.set(this.rest);
+    this.edgeRest.set(this.edgeRest0);
     this.q = [0, 0, 0, 1];
     this.grab = null;
     this.accumulator = 0;
@@ -260,6 +275,22 @@ export class SoftBody {
     this.applySurfaceTension(c.surfaceTension);
     this.applyShapeMatching();
     this.applyGrab();
+    this.flowEdges();
+  }
+
+  /** Plastic flow of the skin toward its current shape, and slow recovery. */
+  private flowEdges() {
+    const p = this.positions, E = this.edges, L = this.edgeRest, L0 = this.edgeRest0;
+    const flow = 1 - Math.exp(-this.coeffs.edgeFlow * SUBSTEP);
+    const back = 1 - Math.exp(-this.coeffs.edgeRecover * SUBSTEP);
+    for (let e = 0; e < L.length; e++) {
+      const a = E[e * 2] * 3, b = E[e * 2 + 1] * 3;
+      const d = Math.hypot(p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]);
+      let l = L[e];
+      l += (d - l) * flow;
+      l += (L0[e] - l) * back;
+      L[e] = Math.min(L0[e] * 4, Math.max(L0[e] * 0.4, l));
+    }
   }
 
   private solveEdges(alpha: number) {
@@ -304,16 +335,23 @@ export class SoftBody {
     for (let i = 0; i < g.length; i++) p[i] += lambda * g[i];
   }
 
+  /**
+   * Soft-selection attachment: each particle in the region is carried by
+   * its falloff weight of the pointer's displacement, so a pull draws out
+   * a rounded tendril and a press sinks a smooth dent (not a rigid plug).
+   */
   private applyGrab() {
     const g = this.grab;
     if (!g) return;
     const p = this.positions;
+    const mx = g.target.x - g.anchor.x, my = g.target.y - g.anchor.y, mz = g.target.z - g.anchor.z;
     for (let k = 0; k < g.indices.length; k++) {
       const i = g.indices[k] * 3;
-      const w = g.weights[k] * GRAB_PULL;
-      p[i] += (g.target.x + g.offsets[k * 3] - p[i]) * w;
-      p[i + 1] += (g.target.y + g.offsets[k * 3 + 1] - p[i + 1]) * w;
-      p[i + 2] += (g.target.z + g.offsets[k * 3 + 2] - p[i + 2]) * w;
+      const w = g.weights[k];
+      const pull = GRAB_PULL * (0.25 + 0.75 * w);
+      p[i] += (g.anchor.x + g.offsets[k * 3] + mx * w - p[i]) * pull;
+      p[i + 1] += (g.anchor.y + g.offsets[k * 3 + 1] + my * w - p[i + 1]) * pull;
+      p[i + 2] += (g.anchor.z + g.offsets[k * 3 + 2] + mz * w - p[i + 2]) * pull;
     }
   }
 
@@ -370,7 +408,11 @@ export class SoftBody {
       const gy = R[1] * rx + R[4] * ry + R[7] * rz + ty;
       const gz = R[2] * rx + R[5] * ry + R[8] * rz + tz;
       const dx = gx - p[o], dy = gy - p[o + 1], dz = gz - p[o + 2];
-      p[o] += dx * (se + sv); p[o + 1] += dy * (se + sv); p[o + 2] += dz * (se + sv);
+      // elastic pull yields beyond a small distance: big stretches sag home
+      // at a gooey pace, small ones still spring back with a wobble
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const ke = dist > YIELD ? (se * YIELD) / dist : se;
+      p[o] += dx * (ke + sv); p[o + 1] += dy * (ke + sv); p[o + 2] += dz * (ke + sv);
       // viscous share also moves the history: position changes, velocity doesn't
       prev[o] += dx * sv; prev[o + 1] += dy * sv; prev[o + 2] += dz * sv;
     }

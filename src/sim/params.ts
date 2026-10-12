@@ -37,6 +37,10 @@ export interface PhysicalCoefficients {
   softReach: number;
   /** distance from the centre a pull can never exceed */
   maxReach: number;
+  /** 1/s — how fast stretched skin flows to its new length (plastic flow) */
+  edgeFlow: number;
+  /** 1/s — how fast that flow is undone, returning the skin to its rest length */
+  edgeRecover: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -55,6 +59,8 @@ export function deriveCoefficients(raw: SlimeBehavior): PhysicalCoefficients {
     surfaceTension: lerp(0.05, 0.025, b.softness),
     softReach: lerp(1.25, 2.5, b.stretchiness),
     maxReach: lerp(1.9, 3.8, b.stretchiness),
+    edgeFlow: lerp(1.2, 8, b.stretchiness),
+    edgeRecover: lerp(0.35, 2.6, Math.pow(b.recovery, 1.2)),
   };
 }
 

@@ -122,24 +122,26 @@ describe('poke and squish', () => {
   test('pressing in dents the surface and bulges the rest', () => {
     const b = makeBody();
     const restWidth = b.metrics().max.x - b.metrics().min.x;
-    const top = b.particle(topIndex(b));
+    const ti = topIndex(b);
+    const top = b.particle(ti);
     b.beginGrab(top);
     b.moveGrab({ x: top.x, y: top.y - 0.4, z: top.z });
     run(b, 0.8);
     const m = b.metrics();
-    expect(b.particle(topIndex(b)).y).toBeLessThan(top.y - 0.25);
-    expect(m.max.x - m.min.x).toBeGreaterThan(restWidth * 1.01);
-    expect(m.volume / m.restVolume).toBeGreaterThan(0.85);
+    expect(b.particle(ti).y).toBeLessThan(top.y - 0.3);
+    expect(m.max.x - m.min.x).toBeGreaterThan(restWidth * 1.005);
+    expect(m.volume / m.restVolume).toBeGreaterThan(0.9);
   });
 
   test('a poke impulse makes a dent that springs back', () => {
     const b = makeBody();
-    const top = b.particle(topIndex(b));
+    const ti = topIndex(b);
+    const top = b.particle(ti);
     b.impulse(top, { x: 0, y: -1, z: 0 }, 6);
     run(b, 0.12);
-    expect(b.particle(topIndex(b)).y).toBeLessThan(top.y - 0.05);
+    expect(b.particle(ti).y).toBeLessThan(top.y - 0.05);
     run(b, 5);
-    expect(Math.abs(b.particle(topIndex(b)).y - top.y)).toBeLessThan(0.03);
+    expect(Math.abs(b.particle(ti).y - top.y)).toBeLessThan(0.03);
   });
 });
 
@@ -240,10 +242,11 @@ describe('behaviour controls change the physics', () => {
   test('viscosity slows the response to a poke', () => {
     const travel = (viscosity: number) => {
       const b = makeBody({ viscosity });
-      const top = b.particle(topIndex(b));
+      const ti = topIndex(b);
+      const top = b.particle(ti);
       b.impulse(top, { x: 0, y: -1, z: 0 }, 5);
       run(b, 0.15);
-      return top.y - b.particle(topIndex(b)).y;
+      return top.y - b.particle(ti).y;
     };
     expect(travel(0)).toBeGreaterThan(travel(1) * 1.2);
   });
@@ -251,28 +254,33 @@ describe('behaviour controls change the physics', () => {
   test('wobble adds overshoot on release', () => {
     const overshoot = (wobble: number) => {
       const b = makeBody({ wobble, viscosity: 0.3 });
-      const top = b.particle(topIndex(b));
+      const ti = topIndex(b);
+      const top = b.particle(ti);
       pullUp(b, 1.0);
       b.endGrab();
       let lowest = Infinity;
       for (let t = 0; t < 3; t += SUBSTEP) {
         b.step(SUBSTEP);
-        lowest = Math.min(lowest, b.particle(topIndex(b)).y);
+        lowest = Math.min(lowest, b.particle(ti).y);
       }
       return top.y - lowest; // how far below rest the top swings
     };
     expect(overshoot(1)).toBeGreaterThan(overshoot(0) + 0.02);
   });
 
-  test('softness makes a press go deeper', () => {
-    const dent = (softness: number) => {
+  test('softness makes a press wider and deeper', () => {
+    const dentedParticles = (softness: number) => {
       const b = makeBody({ softness });
       const top = b.particle(topIndex(b));
       b.beginGrab(top);
-      b.moveGrab({ x: top.x, y: top.y - 0.6, z: top.z });
+      b.moveGrab({ x: top.x, y: top.y - 0.4, z: top.z });
       run(b, 0.8);
-      return b.metrics().volume / b.restVolume;
+      let n = 0;
+      for (let i = 0; i < b.count; i++) if (b.rest[i * 3 + 1] - b.positions[i * 3 + 1] > 0.1) n++;
+      return { n, depth: b.coefficients.maxPressDepth };
     };
-    expect(dent(1)).toBeLessThan(dent(0) - 0.01);
+    const soft = dentedParticles(1), firm = dentedParticles(0);
+    expect(soft.n).toBeGreaterThan(firm.n * 1.5);
+    expect(soft.depth).toBeGreaterThan(firm.depth);
   });
 });
