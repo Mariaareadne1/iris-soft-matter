@@ -8,6 +8,10 @@ test('mobile: blob fits, controls fit, touch pokes and drags', async ({ page }) 
   const bar = await page.locator('.playbar').boundingBox();
   expect(bar!.x).toBeGreaterThanOrEqual(0);
   expect(bar!.x + bar!.width).toBeLessThanOrEqual(vp.width);
+  // icon-only buttons on phones still have accessible names
+  for (const name of ['Customize', 'Reset', 'Capture']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
 
   // the whole resting blob is on screen
   const left = await surfacePoint(page, { x: -1, y: 0, z: 0.2 });

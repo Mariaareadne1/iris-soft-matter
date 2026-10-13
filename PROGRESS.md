@@ -20,7 +20,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `d32ea3c` | Playwright E2E suite runs in GitHub Actions on every push |
 | `7b2fcb0` | Adaptive render resolution (`?fixedres=1` opts out) + separate three.js chunk |
 | `a2729e7` | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
-| _latest_ | Lighter e2e viewport (960×600) + one CI retry: 16/16 locally in one run |
+| `6a8a854` | Lighter e2e viewport (960×600) + one CI retry |
+| _latest_ | Explicit per-render video frames, aria-labels on icon-only bar buttons, recording test at 480×320 |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -55,6 +56,10 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   retry for slow shared runners.
 
 ## Known issues / notes
+- Video recording needs the page to actually render frames: at ~1 fps (software WebGL on CI,
+  or a hidden/throttled tab) an 8 s clip can hold too few frames for the H.264/VP8 encoder to
+  emit data, and the app shows "Recording produced no data". Diagnosed in Playwright's Linux
+  image with `scripts/rec-diag.mjs`; real GPUs render 60–120 fps and record normally.
 - Software GL (SwiftShader) is slow; on a heavily loaded machine (load avg 50–110 during this
   session, from unrelated processes) several E2E tests timed out, so waits were made generous.
   Every test has passed on the final code (see Tests above).

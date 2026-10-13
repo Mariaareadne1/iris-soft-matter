@@ -57,15 +57,15 @@ export function PlayBar(p: Props) {
         <span className="materials__name" aria-hidden>{PRESETS[p.preset].label}</span>
       </div>
       <span className="playbar__rule" aria-hidden />
-      <button className={`bar-btn ${p.studioOpen ? 'is-active' : ''}`} onClick={p.onToggleStudio} aria-expanded={p.studioOpen}>
+      <button className={`bar-btn ${p.studioOpen ? 'is-active' : ''}`} onClick={p.onToggleStudio} aria-expanded={p.studioOpen} aria-label="Customize">
         <IconSliders /> <span>Customize</span>
       </button>
-      <button className="bar-btn" onClick={p.onReset}>
+      <button className="bar-btn" onClick={p.onReset} aria-label="Reset">
         <IconReset /> <span>Reset</span>
       </button>
       <div className="capture" ref={menuRef}>
         <button className={`bar-btn ${menuOpen ? 'is-active' : ''}`} onClick={() => setMenuOpen((o) => !o)}
-          aria-haspopup="menu" aria-expanded={menuOpen}>
+          aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Capture">
           <IconCapture /> <span>Capture</span>
         </button>
         {menuOpen && (

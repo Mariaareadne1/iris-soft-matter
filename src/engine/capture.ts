@@ -54,6 +54,7 @@ export interface ClipResult {
 
 export class ClipRecorder {
   private recorder: MediaRecorder | null = null;
+  private track: CanvasCaptureMediaStreamTrack | null = null;
   private chunks: Blob[] = [];
   private stopTimer: number | null = null;
   private resolveDone: ((r: ClipResult) => void) | null = null;
@@ -73,7 +74,11 @@ export class ClipRecorder {
     if (this.recorder) return Promise.reject(new Error('Already recording'));
     const mimeType = pickVideoMimeType();
     if (!mimeType) return Promise.reject(new Error('Video recording is not supported in this browser'));
-    const stream = canvas.captureStream(60);
+    // frames are pushed explicitly (see frameRendered) rather than sampled:
+    // automatic sampling of a WebGL canvas without preserveDrawingBuffer can
+    // capture nothing at all (seen in headless Linux Chromium)
+    const stream = canvas.captureStream(0);
+    this.track = (stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined) ?? null;
     const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 14_000_000 });
     this.chunks = [];
     this.recorder = rec;
@@ -107,6 +112,11 @@ export class ClipRecorder {
     return done;
   }
 
+  /** Call right after each render, while the drawing buffer is valid. */
+  frameRendered() {
+    if (this.recorder && this.recorder.state === 'recording') this.track?.requestFrame();
+  }
+
   stop() {
     if (this.stopTimer !== null) clearTimeout(this.stopTimer);
     this.stopTimer = null;
@@ -114,6 +124,7 @@ export class ClipRecorder {
   }
 
   private finish(err: Error | null, result?: ClipResult) {
+    this.track = null;
     if (this.stopTimer !== null) clearTimeout(this.stopTimer);
     this.stopTimer = null;
     this.recorder = null;

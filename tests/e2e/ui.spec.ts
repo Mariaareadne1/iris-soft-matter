@@ -120,46 +120,54 @@ test.describe('capture', () => {
     expect(Math.abs(at(png.width / 2, Math.round(png.height * 0.45)) - at(4, 4))).toBeGreaterThan(60);
   });
 
-  test('recording a clip produces a playable, correctly-labelled video', async ({ page }) => {
-    await openApp(page);
-    // listen from the start: on a slow renderer the 8 s clip may finish on
-    // its own before the test reaches the Stop button
-    const downloaded = page.waitForEvent('download', { timeout: 120_000 });
-    await page.getByRole('button', { name: 'Capture' }).click();
-    await page.getByRole('menuitem', { name: /Record 8s clip/ }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'REC' })).toBeVisible();
-    await expect(page.locator('.playbar')).toHaveCount(0); // clean frame while recording
-    const top = await surfacePoint(page, { x: 0, y: 1, z: 0.5 });
-    await drag(page, top, { x: top.x + 60, y: top.y - 150 }, 15);
-    await page.mouse.up();
-    await page.waitForTimeout(1200);
-    const stop = page.getByRole('button', { name: 'Stop' });
-    // the clip may auto-stop at any moment; either way a download follows
-    if (await stop.isVisible()) await stop.click({ timeout: 3_000 }).catch(() => {});
-    const download = await downloaded;
-    const name = download.suggestedFilename();
-    expect(name).toMatch(/^iris-soft-matter-clip-.*\.(webm|mp4)$/);
-    const buf = await readFile((await download.path())!);
-    expect(buf.length).toBeGreaterThan(20_000);
-    if (name.endsWith('.webm')) expect(buf.subarray(0, 4).toString('hex')).toBe('1a45dfa3');
-    else expect(buf.subarray(4, 8).toString('latin1')).toBe('ftyp');
+  test.describe('recording', () => {
+    // a small canvas keeps software WebGL above ~10 fps; at ~1 fps (960x600
+    // on CI runners) an 8 s clip holds too few frames for the encoder to emit
+    // anything — an artefact of the test machine, not of real devices
+    test.use({ viewport: { width: 480, height: 320 } });
 
-    // decode it in the browser to prove it plays
-    const b64 = buf.toString('base64');
-    const mime = name.endsWith('.webm') ? 'video/webm' : 'video/mp4';
-    const meta = await page.evaluate(async ({ b64, mime }) => {
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const v = document.createElement('video');
-      v.muted = true;
-      v.src = URL.createObjectURL(new Blob([bytes], { type: mime }));
-      await new Promise<void>((res, rej) => {
-        v.onloadeddata = () => res();
-        v.onerror = () => rej(new Error('video failed to decode'));
-      });
-      return { w: v.videoWidth, h: v.videoHeight };
-    }, { b64, mime });
-    expect(meta.w).toBeGreaterThan(0);
-    expect(meta.h).toBeGreaterThan(0);
+    test('recording a clip produces a playable, correctly-labelled video', async ({ page }) => {
+      await openApp(page);
+      // listen from the start: on a slow renderer the 8 s clip may finish on
+      // its own before the test reaches the Stop button
+      const downloaded = page.waitForEvent('download', { timeout: 120_000 });
+      await page.getByRole('button', { name: 'Capture' }).click();
+      await page.getByRole('menuitem', { name: /Record 8s clip/ }).click();
+      await expect(page.getByRole('status').filter({ hasText: 'REC' })).toBeVisible();
+      await expect(page.locator('.playbar')).toHaveCount(0); // clean frame while recording
+      const top = await surfacePoint(page, { x: 0, y: 1, z: 0.5 });
+      await drag(page, top, { x: top.x + 60, y: top.y - 150 }, 15);
+      await page.mouse.up();
+      await page.waitForTimeout(1200);
+      const stop = page.getByRole('button', { name: 'Stop' });
+      // the clip may auto-stop at any moment; either way a download follows
+      if (await stop.isVisible()) await stop.click({ timeout: 3_000 }).catch(() => {});
+      const download = await downloaded;
+      const name = download.suggestedFilename();
+      expect(name).toMatch(/^iris-soft-matter-clip-.*\.(webm|mp4)$/);
+      const buf = await readFile((await download.path())!);
+      expect(buf.length).toBeGreaterThan(20_000);
+      if (name.endsWith('.webm')) expect(buf.subarray(0, 4).toString('hex')).toBe('1a45dfa3');
+      else expect(buf.subarray(4, 8).toString('latin1')).toBe('ftyp');
+
+      // decode it in the browser to prove it plays
+      const b64 = buf.toString('base64');
+      const mime = name.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+      const meta = await page.evaluate(async ({ b64, mime }) => {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const v = document.createElement('video');
+        v.muted = true;
+        v.src = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        await new Promise<void>((res, rej) => {
+          v.onloadeddata = () => res();
+          v.onerror = () => rej(new Error('video failed to decode'));
+        });
+        return { w: v.videoWidth, h: v.videoHeight };
+      }, { b64, mime });
+      expect(meta.w).toBeGreaterThan(0);
+      expect(meta.h).toBeGreaterThan(0);
+    });
+
   });
 
   test('clean view hides every control', async ({ page }) => {

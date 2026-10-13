@@ -245,6 +245,7 @@ export class SlimeApp {
     this.stage.updateFraming(dt);
     this.controls.update();
     this.stage.render();
+    this.recorder.frameRendered();
   };
 
   dispose() {
