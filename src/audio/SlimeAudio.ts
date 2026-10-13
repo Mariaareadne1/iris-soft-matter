@@ -103,14 +103,18 @@ export class SlimeAudio {
     return this.recordDest?.stream ?? null;
   }
 
-  /** RMS level of the master bus, 0..1 (tests use this to prove sound is made). */
+  /**
+   * Peak level of the master bus over the last ~0.7 s, 0..1. The long window
+   * means a brief poke is still caught even if the main thread only gets to
+   * look occasionally (tests use this to prove sound is actually made).
+   */
   level(): number {
     if (!this.analyser) return 0;
     const buf = new Float32Array(this.analyser.fftSize);
     this.analyser.getFloatTimeDomainData(buf);
-    let s = 0;
-    for (const v of buf) s += v * v;
-    return Math.sqrt(s / buf.length);
+    let peak = 0;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v));
+    return peak;
   }
 
   /** Per-frame: drive the continuous stretch and squish layers. */
@@ -178,7 +182,7 @@ export class SlimeAudio {
     this.recordDest = ctx.createMediaStreamDestination();
     comp.connect(this.recordDest);
     this.analyser = ctx.createAnalyser();
-    this.analyser.fftSize = 1024;
+    this.analyser.fftSize = 32768; // ~0.7 s at 48 kHz
     comp.connect(this.analyser);
     this.applyMaster();
 

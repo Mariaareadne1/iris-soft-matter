@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
 import { drag, openApp, settle, surfacePoint } from './helpers.ts';
 
 type Audio = { ready: boolean; on: boolean; level: number; pokes: number; releases: number; presses: number; clipHadAudio: boolean };
@@ -86,20 +85,26 @@ test.describe('sound', () => {
       await openApp(page);
       const p = await surfacePoint(page, { x: 0.1, y: 0.3, z: 1 });
       await page.mouse.click(p.x, p.y); // unlock audio
-      await listen(page);
-      const downloaded = page.waitForEvent('download', { timeout: 120_000 });
-      await page.getByRole('button', { name: 'Capture' }).click();
-      await page.getByRole('menuitem', { name: /Record 8s clip/ }).click();
-      await page.mouse.click(p.x, p.y);
-      const stop = page.getByRole('button', { name: 'Stop' });
-      await page.waitForTimeout(1500);
-      if (await stop.isVisible()) await stop.click({ timeout: 3_000 }).catch(() => {});
-      const download = await downloaded;
-      const buf = await readFile((await download.path())!);
+      await expect.poll(async () => (await audio(page)).ready, { timeout: 30_000 }).toBe(true);
+      // the capture UI path is covered by the video test; here call the
+      // recorder directly so any failure reports its real error
+      const res = await page.evaluate(async () => {
+        const app = (window as unknown as { __iris: {
+          startRecording(s: number, k: string): Promise<{ blob: Blob; mimeType: string }>;
+          audio: { play(e: { kind: 'poke'; strength: number }): void };
+        } }).__iris;
+        try {
+          const done = app.startRecording(4, 'sound');
+          setTimeout(() => app.audio.play({ kind: 'poke', strength: 1 }), 600);
+          const clip = await done;
+          const text = new TextDecoder('latin1').decode(new Uint8Array(await clip.blob.arrayBuffer()));
+          return { ok: true, type: clip.mimeType, bytes: clip.blob.size, audioCodec: /mp4a|A_OPUS|Opus/.test(text) };
+        } catch (e) {
+          return { ok: false, error: String(e) };
+        }
+      });
+      expect(res).toMatchObject({ ok: true, audioCodec: true });
       expect((await audio(page)).clipHadAudio).toBe(true);
-      const text = buf.toString('latin1');
-      // AAC in MP4, or Opus in WebM/Matroska
-      expect(text.includes('mp4a') || text.includes('A_OPUS') || text.includes('Opus')).toBe(true);
     });
   });
 });
