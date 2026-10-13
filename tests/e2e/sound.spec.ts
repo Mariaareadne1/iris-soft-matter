@@ -103,6 +103,7 @@ test.describe('sound', () => {
           return { ok: false, error: String(e) };
         }
       });
+      expect(res.ok ? 'recorded' : res.error).toBe('recorded'); // surfaces the recorder's own error
       expect(res).toMatchObject({ ok: true, audioCodec: true });
       expect((await audio(page)).clipHadAudio).toBe(true);
     });

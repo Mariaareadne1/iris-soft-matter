@@ -23,7 +23,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `6a8a854` | Lighter e2e viewport (960×600) + one CI retry |
 | `82c2814` | Explicit per-render video frames, aria-labels on icon-only bar buttons, recording test at 480×320 — **CI E2E green** (15 passed + 1 passed on retry) |
 | `db8a949` | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
-| _latest_ | Procedural slime sound + audio in recorded clips; .mkv labelling for Matroska |
+| `37032c1` | Procedural slime sound + audio in recorded clips; .mkv labelling for Matroska |
+| `ff9c777` | Sound tests robust on slow runners (windowed peak meter) — **CI E2E green** (18 passed, 2 recording tests passed on retry) |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -61,6 +62,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   retry for slow shared runners; first green CI run at `82c2814`.
 
 ## Known issues / notes
+- On GitHub's software-GL runners the two recording tests occasionally need their one retry
+  (too few frames in the first attempt); everything else passes first time.
 - Video recording needs the page to actually render frames: at ~1 fps (software WebGL on CI,
   or a hidden/throttled tab) an 8 s clip can hold too few frames for the H.264/VP8 encoder to
   emit data, and the app shows "Recording produced no data". Diagnosed in Playwright's Linux
