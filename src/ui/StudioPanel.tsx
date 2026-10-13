@@ -11,6 +11,10 @@ interface Props {
   onPreset: (id: PresetId) => void;
   onClose: () => void;
   onDemo: () => void;
+  soundOn: boolean;
+  volume: number;
+  onSound: (on: boolean) => void;
+  onVolume: (v: number) => void;
 }
 
 const BEHAVIOR_CONTROLS: { key: keyof SlimeBehavior; label: string; low: string; high: string }[] = [
@@ -23,7 +27,7 @@ const BEHAVIOR_CONTROLS: { key: keyof SlimeBehavior; label: string; low: string;
 
 const SWATCHES = ['#a58cff', '#8fb8ff', '#7fe6ff', '#ff9fd6', '#f3b9cf', '#d7dbe6', '#bfeaff', '#c6f7c9'];
 
-export function StudioPanel({ open, settings, onChange, onPreset, onClose, onDemo }: Props) {
+export function StudioPanel({ open, settings, onChange, onPreset, onClose, onDemo, soundOn, volume, onSound, onVolume }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const setBehavior = (key: keyof SlimeBehavior, v: number) =>
     onChange({ ...settings, behavior: { ...settings.behavior, [key]: v } });
@@ -114,6 +118,15 @@ export function StudioPanel({ open, settings, onChange, onPreset, onClose, onDem
           onChange={(v) => onChange({ ...settings, iridescence: v })} />
         <Slider id="l-gloss" label="Gloss" low="Satin" high="Wet" value={settings.gloss}
           onChange={(v) => onChange({ ...settings, gloss: v })} />
+      </section>
+
+      <section className="studio__section">
+        <h3 className="label">Sound</h3>
+        <label className="toggle">
+          <input type="checkbox" checked={soundOn} onChange={(e) => onSound(e.target.checked)} />
+          <span>Slime sounds</span>
+        </label>
+        <Slider id="s-volume" label="Volume" low="Quiet" high="Loud" value={volume} onChange={onVolume} />
       </section>
 
       <section className="studio__section">

@@ -16,6 +16,13 @@ import type { SoftBody, Vec3 } from '../sim/softBody.ts';
  */
 export type InteractionState = 'idle' | 'pressing' | 'dragging';
 
+/** What the user just did — drives sound. `poke` strength is 0..1. */
+export type InteractionEvent =
+  | { kind: 'press' }
+  | { kind: 'drag' }
+  | { kind: 'release'; from: 'pressing' | 'dragging' }
+  | { kind: 'poke'; strength: number };
+
 export interface InteractionTuning {
   /** 0..1 — how lazily the region trails the pointer */
   viscosity: number;
@@ -35,6 +42,8 @@ export class Interaction {
   onFirstTouch: (() => void) | null = null;
   /** fired whenever the user starts touching the blob */
   onTouch: (() => void) | null = null;
+  /** press / drag / release / poke, for sound */
+  onEvent: ((e: InteractionEvent) => void) | null = null;
   enabled = true;
 
   private pointerId: number | null = null;
@@ -145,6 +154,7 @@ export class Interaction {
       this.onFirstTouch?.();
     }
     this.onTouch?.();
+    this.onEvent?.({ kind: 'press' });
   };
 
   private onMove = (e: PointerEvent) => {
@@ -157,6 +167,7 @@ export class Interaction {
       const moved = Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y);
       if (moved < DRAG_SLOP_PX) return;
       this.state = 'dragging';
+      this.onEvent?.({ kind: 'drag' });
     }
     this.setNdc(e);
     this.raycaster.setFromCamera(this.ndc, this.camera);
@@ -167,11 +178,12 @@ export class Interaction {
     if (e.pointerId !== this.pointerId) return;
     const wasPress = this.state === 'pressing';
     const quick = performance.now() / 1000 - this.downAt.time < QUICK_CLICK_S;
-    this.release();
+    this.release(!(wasPress && quick));
     if (wasPress && quick) {
       // a quick click: the press barely started, so kick it inward instead
       const t = this.tuning();
       this.body.impulse(this.hitPoint, this.inward, 3.2 + 3 * t.softness, 0.85);
+      this.onEvent?.({ kind: 'poke', strength: 0.4 + 0.6 * t.softness });
     }
   };
 
@@ -184,8 +196,9 @@ export class Interaction {
     if (this.state !== 'idle') this.release();
   };
 
-  private release() {
+  private release(announce = true) {
     const id = this.pointerId;
+    if (announce && this.state !== 'idle') this.onEvent?.({ kind: 'release', from: this.state });
     this.state = 'idle';
     this.pointerId = null;
     this.body.endGrab();

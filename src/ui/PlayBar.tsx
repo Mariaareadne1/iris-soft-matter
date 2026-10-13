@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PRESETS, PRESET_ORDER, type PresetId } from '../render/presets.ts';
-import { IconCapture, IconEye, IconPlay, IconRecord, IconReset, IconSliders, IconStill } from './icons.tsx';
+import { IconCapture, IconEye, IconMuted, IconPlay, IconRecord, IconReset, IconSliders, IconSound, IconStill } from './icons.tsx';
 
 interface Props {
   preset: PresetId;
@@ -13,6 +13,8 @@ interface Props {
   onRecord: () => void;
   onRecordDemo: () => void;
   onCleanView: () => void;
+  soundOn: boolean;
+  onToggleSound: () => void;
 }
 
 export function PlayBar(p: Props) {
@@ -59,6 +61,15 @@ export function PlayBar(p: Props) {
       <span className="playbar__rule" aria-hidden />
       <button className={`bar-btn ${p.studioOpen ? 'is-active' : ''}`} onClick={p.onToggleStudio} aria-expanded={p.studioOpen} aria-label="Customize">
         <IconSliders /> <span>Customize</span>
+      </button>
+      <button
+        className="bar-btn bar-btn--icon"
+        onClick={p.onToggleSound}
+        aria-pressed={p.soundOn}
+        aria-label="Sound"
+        title={p.soundOn ? 'Sound on (M)' : 'Sound off (M)'}
+      >
+        {p.soundOn ? <IconSound /> : <IconMuted />}
       </button>
       <button className="bar-btn" onClick={p.onReset} aria-label="Reset">
         <IconReset /> <span>Reset</span>

@@ -4,6 +4,14 @@
  * supported (Safari, recent Chromium), otherwise WebM — and the file gets
  * the matching extension, never a mislabeled one.
  */
+/** containers with an audio codec, tried first when the clip carries sound */
+const AV_TYPES = [
+  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+];
+
 const VIDEO_TYPES = [
   'video/mp4;codecs=avc1.640028',
   'video/mp4;codecs=avc1.42E01E',
@@ -16,12 +24,17 @@ const VIDEO_TYPES = [
 export function pickVideoMimeType(
   isSupported: (t: string) => boolean = (t) =>
     typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t),
+  withAudio = false,
 ): string | null {
-  return VIDEO_TYPES.find((t) => isSupported(t)) ?? null;
+  const candidates = withAudio ? [...AV_TYPES, ...VIDEO_TYPES] : VIDEO_TYPES;
+  return candidates.find((t) => isSupported(t)) ?? null;
 }
 
-export function extensionFor(mimeType: string): 'mp4' | 'webm' {
-  return mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+export function extensionFor(mimeType: string): 'mp4' | 'webm' | 'mkv' {
+  if (mimeType.startsWith('video/mp4')) return 'mp4';
+  // Chromium reports some WebM-family recordings as Matroska; label them truthfully
+  if (mimeType.startsWith('video/x-matroska')) return 'mkv';
+  return 'webm';
 }
 
 export function timestampedName(kind: string, ext: string) {
@@ -56,6 +69,8 @@ export class ClipRecorder {
   private recorder: MediaRecorder | null = null;
   private track: CanvasCaptureMediaStreamTrack | null = null;
   private chunks: Blob[] = [];
+  /** whether the most recent clip included an audio track */
+  lastHadAudio = false;
   private stopTimer: number | null = null;
   private resolveDone: ((r: ClipResult) => void) | null = null;
   private rejectDone: ((e: Error) => void) | null = null;
@@ -70,16 +85,20 @@ export class ClipRecorder {
   }
 
   /** Starts recording; the promise settles once the clip is finalised. */
-  start(canvas: HTMLCanvasElement, maxSeconds: number, kind = 'clip'): Promise<ClipResult> {
+  start(canvas: HTMLCanvasElement, maxSeconds: number, kind = 'clip', audio: MediaStream | null = null): Promise<ClipResult> {
     if (this.recorder) return Promise.reject(new Error('Already recording'));
-    const mimeType = pickVideoMimeType();
+    const audioTracks = audio?.getAudioTracks() ?? [];
+    const mimeType = pickVideoMimeType(undefined, audioTracks.length > 0);
     if (!mimeType) return Promise.reject(new Error('Video recording is not supported in this browser'));
     // frames are pushed explicitly (see frameRendered) rather than sampled:
     // automatic sampling of a WebGL canvas without preserveDrawingBuffer can
     // capture nothing at all (seen in headless Linux Chromium)
     const stream = canvas.captureStream(0);
     this.track = (stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined) ?? null;
-    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 14_000_000 });
+    // clones, so stopping the recording never stops the live sound
+    for (const t of audioTracks) stream.addTrack(t.clone());
+    this.lastHadAudio = audioTracks.length > 0;
+    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 14_000_000, audioBitsPerSecond: 160_000 });
     this.chunks = [];
     this.recorder = rec;
     const done = new Promise<ClipResult>((resolve, reject) => {

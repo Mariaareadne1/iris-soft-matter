@@ -41,3 +41,11 @@ export const IconRecord = () => (
 export const IconEye = () => (
   <svg {...base}><path d="M1.8 8S4 3.8 8 3.8 14.2 8 14.2 8 12 12.2 8 12.2 1.8 8 1.8 8z" /><circle cx="8" cy="8" r="1.9" /></svg>
 );
+
+export const IconSound = () => (
+  <svg {...base}><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z" /><path d="M10.4 5.6a3.4 3.4 0 0 1 0 4.8M12.2 3.9a5.8 5.8 0 0 1 0 8.2" /></svg>
+);
+
+export const IconMuted = () => (
+  <svg {...base}><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z" /><path d="M10.5 6l3.5 4M14 6l-3.5 4" /></svg>
+);

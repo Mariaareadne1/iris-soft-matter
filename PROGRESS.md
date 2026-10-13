@@ -22,7 +22,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `a2729e7` | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
 | `6a8a854` | Lighter e2e viewport (960×600) + one CI retry |
 | `82c2814` | Explicit per-render video frames, aria-labels on icon-only bar buttons, recording test at 480×320 — **CI E2E green** (15 passed + 1 passed on retry) |
-| _latest_ | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
+| `db8a949` | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
+| _latest_ | Procedural slime sound + audio in recorded clips; .mkv labelling for Matroska |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -41,13 +42,16 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   extension matches); "Record demo"; clean view (`H`).
 - Show Demo: scripted grab/pull/release/poke sequence driven through the real simulation.
 - Embed: `?embed=1` (optional `&controls=1`, `&material=`, `&bg=`).
-- Keyboard: `R` reset, `H` clean view, `D` demo, `Esc` close panel.
+- Sound (`src/audio/SlimeAudio.ts`): procedural Web Audio — stretch creak, press squelch, poke
+  bloop, release slurp; per-material timbre; toggle in bar / `M`, volume in Studio, `?sound=0`;
+  recorded into clips (MP4 AAC or WebM Opus). Preference remembered per viewer.
+- Keyboard: `R` reset, `H` clean view, `D` demo, `M` sound, `Esc` close panel.
 
 ## Tests
-- `npm test` — 27 Vitest tests: 22 physics + 5 adaptive-quality controller tests. Physics: (topology, rest stability, idle, stretch locality, volume,
+- `npm test` — 32 Vitest tests: 22 physics + 5 adaptive-quality + 5 clip-format tests. Physics: (topology, rest stability, idle, stretch locality, volume,
   gradual release, reach limit, dent/bulge, poke recovery, 120 random grabs, extreme settings,
   frame-rate independence, determinism, reset, every behaviour slider has a measurable effect). **All pass.**
-- `npm run test:e2e` — 16 Playwright tests on the production build (SwiftShader WebGL):
+- `npm run test:e2e` — 20 Playwright tests on the production build (SwiftShader WebGL), incl. 4 sound tests:
   launch/no errors/one mesh, poke pixels change, drag stretch is local (bottom moves < 30 % of top),
   gradual release, drag outside canvas, press-and-hold squish, rough handling, reset, presets
   differ pairwise, studio wiring (physics + renderer + pixels), extreme sliders, PNG export,

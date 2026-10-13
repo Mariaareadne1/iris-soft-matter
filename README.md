@@ -20,10 +20,16 @@ matter that feels good to touch.
 | Click / tap | A poke — a dent that springs back and wobbles |
 | Press and hold | A squish that deepens while held |
 | Drag empty space | Orbit the camera · scroll to zoom |
-| `R` / `H` / `D` / `Esc` | Reset · clean view · show demo · close panel |
+| `R` / `H` / `D` / `M` / `Esc` | Reset · clean view · show demo · sound on/off · close panel |
 
 **Materials:** Holographic Jelly (default), Liquid Chrome, Pastel Putty, Clear Slime — all on the
 same blob, each with its own optics *and* physics.
+
+**Sound:** the slime makes its own noises, synthesised live from the simulation — a gooey creak
+that rises as you stretch, a squelch while you press, a wet *bloop* when you poke, and a wobbling
+*slurp* when a stretch lets go. Each material has its own voice (chrome rings, putty thuds, clear
+slime is glassy). Toggle it in the play bar or with `M`; volume lives in Customize. Audio starts
+on your first click or tap, as browsers require.
 
 **Customize (Studio):** material, color, Stretchiness, Viscosity, Softness, Wobble, Recovery
 speed, Iridescence, Gloss, Background. Every control drives the simulation or the renderer
@@ -53,6 +59,13 @@ recording, and `H` gives a clean view for screen-recording tools.
   morphs into a pinch with a held core, so pulls form a rounded glob on a neck. Pulls are softly
   limited, and the body self-heals if it ever goes non-finite (it never has in testing).
 
+Sound (`src/audio/SlimeAudio.ts`) is pure Web Audio — no samples. Continuous layers (band-passed
+noise and a creaky triangle tone for stretching, low-passed noise for squishing) are driven every
+frame by how far and how fast the body is deforming; one-shots (a rising sine "drop" for pokes, a
+falling, vibrato-wobbled glide plus a noise sweep for releases) fire from interaction events. The
+demo emits the same events, so it sounds like a person playing. The master bus also feeds a
+`MediaStream`, so recorded clips include the sound.
+
 Rendering (`src/render/`) refines each simulated triangle into four on the curved PN-triangle
 patch (20,480 triangles on screen), and a `MeshPhysicalMaterial` with transmission, clearcoat and
 thin-film iridescence gets an injected holographic film layer — adapted from the Iris cloth foil
@@ -77,9 +90,9 @@ npm run preview    # serve dist/ on http://localhost:4173
 ## Tests
 
 ```bash
-npm test                         # 22 deterministic physics tests (Vitest, Node)
+npm test                         # 32 unit tests: physics, quality controller, clip format (Vitest)
 npx playwright install chromium  # once
-npm run test:e2e                 # 16 browser tests against the production build
+npm run test:e2e                 # 20 browser tests against the production build
 ```
 
 The physics tests check topology, rest stability, stretch locality, volume preservation, gradual
@@ -88,7 +101,8 @@ and that every behavior slider has a measurable effect. The browser tests drive 
 touch input and assert on simulation metrics **and pixel differences** — a passing test means the
 blob visibly changed shape, not just that a handler fired. They cover presets, Studio wiring,
 PNG and video export (the video is decoded in the browser), the demo, embed mode in a resizable
-iframe and a Pixel 7 mobile viewport.
+iframe, a Pixel 7 mobile viewport, and sound (pokes and stretches are audible on the master
+bus, muting silences it, recorded clips contain an audio track).
 
 Visual review helpers: `node scripts/shots.mjs <url> <outDir>` saves rest / stretch / side /
 press screenshots for every preset; `scripts/og.mjs` regenerates the social image.
@@ -123,6 +137,7 @@ If you deploy somewhere other than GitHub Pages, update the absolute `og:image`,
 | `controls=1` | With `embed=1`, keep the play bar (materials, reset, capture) |
 | `material=jelly\|chrome\|putty\|clear` | Starting material |
 | `bg=nocturne\|porcelain\|dusk\|void` | Starting background |
+| `sound=0` | Start muted (visitors can still turn sound on) |
 | `fixedres=1` | Turn off adaptive resolution (by default it lowers render resolution on slow GPUs and restores it when there's headroom) |
 
 The canvas tracks its container with a `ResizeObserver`, so any iframe size works. Touch input
@@ -130,14 +145,16 @@ is captured inside the frame (`touch-action: none`), so drags won't scroll the h
 
 ## Video format and MP4 conversion
 
-Clips are recorded from the canvas with `MediaRecorder`. The app asks the browser for MP4
-(H.264) first and falls back to WebM (VP9/VP8), and the file extension always matches what was
-actually recorded. Safari and recent Chrome produce `.mp4`; Firefox produces `.webm`.
+Clips are recorded from the canvas with `MediaRecorder`, one video frame per rendered frame,
+with the slime's sound when it's on. The app asks for MP4 (H.264 + AAC) first and falls back to
+WebM (VP9/VP8 + Opus); the file extension always matches what was actually recorded (`.mp4`,
+`.webm`, or `.mkv` if the browser reports Matroska). Safari and recent Chrome produce `.mp4`;
+Firefox produces `.webm`.
 
 X accepts MP4. To convert a WebM clip:
 
 ```bash
-ffmpeg -i iris-soft-matter-clip.webm -c:v libx264 -pix_fmt yuv420p -crf 18 -preset slow -movflags +faststart iris-soft-matter-clip.mp4
+ffmpeg -i iris-soft-matter-clip.webm -c:v libx264 -pix_fmt yuv420p -crf 18 -preset slow -c:a aac -b:a 160k -movflags +faststart iris-soft-matter-clip.mp4
 ```
 
 ## Project layout
@@ -145,7 +162,8 @@ ffmpeg -i iris-soft-matter-clip.webm -c:v libx264 -pix_fmt yuv420p -crf 18 -pres
 ```
 src/sim/       soft body, icosphere topology, behavior → coefficients, rotation extraction
 src/render/    PN-refined geometry, slime material, stage (env, backdrop, shadow, post), presets
-src/engine/    SlimeApp (loop + public API), pointer interaction, demo player, capture
+src/engine/    SlimeApp (loop + public API), pointer interaction, demo player, capture, adaptive quality
+src/audio/     procedural slime sound (Web Audio)
 src/ui/        React UI: play bar, Studio panel, settings / URL options, styles
 tests/unit/    Vitest physics tests        tests/e2e/   Playwright browser tests
 ```

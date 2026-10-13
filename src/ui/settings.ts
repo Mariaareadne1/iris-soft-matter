@@ -19,6 +19,8 @@ export interface PageOptions {
   controls: boolean;
   /** disable adaptive resolution (deterministic pixels for tests/recording) */
   fixedResolution: boolean;
+  /** start with sound off (`?sound=0`) */
+  soundOff: boolean;
   initial: SlimeSettings;
 }
 
@@ -35,6 +37,30 @@ export function readPageOptions(search: string): PageOptions {
     embed: flag('embed'),
     controls: flag('controls'),
     fixedResolution: flag('fixedres'),
+    soundOff: ['0', 'false', 'off', 'no'].includes((q.get('sound') ?? '').toLowerCase()),
     initial: settingsForPreset(isPreset(material) ? material : 'jelly', isBackdrop(bg) ? bg : 'nocturne'),
   };
+}
+
+const SOUND_KEY = 'iris-soft-matter:sound';
+
+/** Per-viewer sound preference; storage can be unavailable, so never throw. */
+export function loadSoundPref(): { on: boolean; volume: number } | null {
+  try {
+    const raw = localStorage.getItem(SOUND_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { on?: unknown; volume?: unknown };
+    if (typeof v.on !== 'boolean' || typeof v.volume !== 'number') return null;
+    return { on: v.on, volume: Math.min(1, Math.max(0, v.volume)) };
+  } catch {
+    return null;
+  }
+}
+
+export function saveSoundPref(pref: { on: boolean; volume: number }) {
+  try {
+    localStorage.setItem(SOUND_KEY, JSON.stringify(pref));
+  } catch {
+    /* private mode / blocked storage: preference just isn't remembered */
+  }
 }

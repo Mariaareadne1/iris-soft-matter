@@ -3,7 +3,7 @@ import { SlimeApp, type SlimeSettings } from '../engine/SlimeApp.ts';
 import { ClipRecorder, downloadBlob, timestampedName } from '../engine/capture.ts';
 import { DEMO_DURATION } from '../engine/demo.ts';
 import { BACKDROPS, type PresetId } from '../render/presets.ts';
-import { readPageOptions, settingsForPreset } from './settings.ts';
+import { loadSoundPref, readPageOptions, saveSoundPref, settingsForPreset } from './settings.ts';
 import { PlayBar } from './PlayBar.tsx';
 import { StudioPanel } from './StudioPanel.tsx';
 
@@ -23,6 +23,10 @@ export function App() {
   const [demoRunning, setDemoRunning] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [sound, setSound] = useState(() => {
+    const saved = loadSoundPref();
+    return { on: page.soundOff ? false : (saved?.on ?? true), volume: saved?.volume ?? 0.8 };
+  });
   const canRecord = useMemo(() => ClipRecorder.isSupported(), []);
   const touchFirst = useMemo(() => window.matchMedia?.('(pointer: coarse)').matches ?? false, []);
 
@@ -38,6 +42,8 @@ export function App() {
       return;
     }
     appRef.current = app;
+    app.setSound(sound.on);
+    app.setVolume(sound.volume);
     app.onFirstTouch = () => setHintVisible(false);
     app.onDemoChange = (running) => setDemoRunning(running);
     (window as unknown as { __iris?: SlimeApp }).__iris = app;
@@ -50,6 +56,12 @@ export function App() {
   useEffect(() => {
     appRef.current?.apply(settings);
   }, [settings]);
+
+  useEffect(() => {
+    appRef.current?.setSound(sound.on);
+    appRef.current?.setVolume(sound.volume);
+    if (!page.soundOff) saveSoundPref(sound);
+  }, [sound, page]);
 
   useEffect(() => {
     appRef.current?.setPanelOpen(studioOpen && !clean && !recording);
@@ -133,6 +145,9 @@ export function App() {
         case 'd': case 'D':
           playDemo();
           break;
+        case 'm': case 'M':
+          setSound((v) => ({ ...v, on: !v.on }));
+          break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -176,6 +191,8 @@ export function App() {
           onRecord={() => record('clip')}
           onRecordDemo={() => record('demo')}
           onCleanView={() => setClean(true)}
+          soundOn={sound.on}
+          onToggleSound={() => setSound((v) => ({ ...v, on: !v.on }))}
         />
       )}
 
@@ -187,6 +204,10 @@ export function App() {
           onPreset={choosePreset}
           onClose={() => setStudioOpen(false)}
           onDemo={playDemo}
+          soundOn={sound.on}
+          volume={sound.volume}
+          onSound={(on) => setSound((v) => ({ ...v, on }))}
+          onVolume={(volume) => setSound((v) => ({ ...v, volume, on: volume > 0 ? true : v.on }))}
         />
       )}
 

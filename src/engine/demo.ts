@@ -1,4 +1,5 @@
 import type { SoftBody, Vec3 } from '../sim/softBody.ts';
+import type { InteractionEvent } from './interaction.ts';
 
 /**
  * Scripted showcase driven through the same grab / impulse API the pointer
@@ -40,6 +41,8 @@ export class DemoPlayer {
   private pull: Extract<Step, { kind: 'pull' }> | null = null;
   running = false;
   onEnd: (() => void) | null = null;
+  /** the same events a person would produce, so the demo sounds real */
+  onEvent: ((e: InteractionEvent) => void) | null = null;
 
   constructor(private body: SoftBody) {}
 
@@ -54,6 +57,7 @@ export class DemoPlayer {
   stop() {
     if (!this.running) return;
     this.running = false;
+    if (this.body.isGrabbing) this.onEvent?.({ kind: 'release', from: 'dragging' });
     this.body.endGrab();
     this.onEnd?.();
   }
@@ -83,6 +87,7 @@ export class DemoPlayer {
         const point = this.body.particle(this.body.nearestParticle(step.anchor));
         this.body.beginGrab(point);
         this.origin = point;
+        this.onEvent?.({ kind: 'drag' });
         break;
       }
       case 'pull':
@@ -91,10 +96,12 @@ export class DemoPlayer {
       case 'release':
         this.body.endGrab();
         this.pull = null;
+        this.onEvent?.({ kind: 'release', from: 'dragging' });
         break;
       case 'poke': {
         const point = this.body.particle(this.body.nearestParticle(step.anchor));
         this.body.impulse(point, step.dir, step.speed, 0.9);
+        this.onEvent?.({ kind: 'poke', strength: Math.min(1, step.speed / 8) });
         break;
       }
       case 'end':

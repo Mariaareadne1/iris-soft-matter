@@ -6,7 +6,8 @@ import { BlobGeometry } from '../render/blobGeometry.ts';
 import { SlimeMaterial } from '../render/slimeMaterial.ts';
 import { Stage } from '../render/stage.ts';
 import { BACKDROPS, PRESETS, type BackgroundId, type PresetId } from '../render/presets.ts';
-import { Interaction, type InteractionState } from './interaction.ts';
+import { Interaction, type InteractionEvent, type InteractionState } from './interaction.ts';
+import { SlimeAudio } from '../audio/SlimeAudio.ts';
 import { DemoPlayer } from './demo.ts';
 import { ClipRecorder, canvasToPng, type ClipResult } from './capture.ts';
 import { AdaptiveQuality } from './adaptiveQuality.ts';
@@ -45,6 +46,10 @@ export class SlimeApp {
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private frameCount = 0;
+  private audio = new SlimeAudio();
+  private soundOn = true;
+  private lastDeformation = 0;
+  private deformationSpeed = 0;
 
   onFirstTouch: (() => void) | null = null;
   onDemoChange: ((running: boolean) => void) | null = null;
@@ -81,6 +86,11 @@ export class SlimeApp {
       (on) => { this.controls.enabled = on; },
     );
     this.interaction.onFirstTouch = () => this.onFirstTouch?.();
+    this.interaction.onEvent = this.onSoundEvent;
+    this.demo.onEvent = this.onSoundEvent;
+    // Web Audio may only start from a user gesture; any click or key will do
+    window.addEventListener('pointerdown', this.unlockAudio, true);
+    window.addEventListener('keydown', this.unlockAudio, true);
 
     this.controls = new OrbitControls(this.stage.camera, canvas);
     this.controls.target.set(0, -0.05, 0);
@@ -111,7 +121,17 @@ export class SlimeApp {
     return this.stage.canvas;
   }
 
+  setSound(on: boolean) {
+    this.soundOn = on;
+    this.audio.setMuted(!on);
+  }
+
+  setVolume(v: number) {
+    this.audio.setVolume(v);
+  }
+
   apply(settings: SlimeSettings) {
+    this.audio.setPreset(settings.preset);
     this.settings = settings;
     this.body.setBehavior(settings.behavior);
     const preset = PRESETS[settings.preset] ?? PRESETS.jelly;
@@ -162,7 +182,8 @@ export class SlimeApp {
   }
 
   startRecording(seconds: number, kind = 'clip'): Promise<ClipResult> {
-    return this.recorder.start(this.stage.canvas, seconds, kind);
+    const audio = this.soundOn && this.audio.ready ? this.audio.recordingStream : null;
+    return this.recorder.start(this.stage.canvas, seconds, kind, audio);
   }
 
   stopRecording() {
@@ -215,6 +236,13 @@ export class SlimeApp {
       pixelRatio: this.stage.currentPixelRatio,
       frameMs: this.quality.averageFrameMs,
       recording: this.recorder.recording,
+      audio: {
+        ready: this.audio.ready,
+        on: this.soundOn,
+        level: this.audio.level(),
+        ...this.audio.stats,
+        clipHadAudio: this.recorder.lastHadAudio,
+      },
     };
   }
 
@@ -240,6 +268,7 @@ export class SlimeApp {
 
     const m = this.body.metrics();
     this.stage.updateShadow(m.min, m.max);
+    this.updateAudio(m.maxDeviation, dt);
     this.stage.setTime(this.elapsed);
     this.material.uniforms.uTime.value = this.elapsed;
     this.stage.updateFraming(dt);
@@ -248,7 +277,39 @@ export class SlimeApp {
     this.recorder.frameRendered();
   };
 
+  private unlockAudio = () => {
+    this.audio.unlock();
+  };
+
+  private onSoundEvent = (e: InteractionEvent) => {
+    if (e.kind === 'release') {
+      const amount = this.body.metrics().maxDeviation;
+      // a held press springs back with a bloop; a stretch recoils with a slurp
+      if (e.from === 'pressing') this.audio.play({ kind: 'poke', strength: Math.min(1, 0.3 + amount * 1.6) });
+      else this.audio.play({ kind: 'release', amount });
+    } else {
+      this.audio.play(e);
+    }
+  };
+
+  private updateAudio(deformation: number, dt: number) {
+    if (dt > 0) {
+      const raw = (deformation - this.lastDeformation) / dt;
+      this.deformationSpeed += (raw - this.deformationSpeed) * 0.35;
+    }
+    this.lastDeformation = deformation;
+    const demoHolding = this.demo.running && this.body.isGrabbing;
+    this.audio.update({
+      deformation,
+      deformationSpeed: this.deformationSpeed,
+      holding: demoHolding ? 'dragging' : this.interaction.state,
+    });
+  }
+
   dispose() {
+    window.removeEventListener('pointerdown', this.unlockAudio, true);
+    window.removeEventListener('keydown', this.unlockAudio, true);
+    this.audio.dispose();
     this.disposed = true;
     this.recorder.stop();
     this.stage.renderer.setAnimationLoop(null);

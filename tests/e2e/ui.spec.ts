@@ -144,17 +144,17 @@ test.describe('capture', () => {
       if (await stop.isVisible()) await stop.click({ timeout: 3_000 }).catch(() => {});
       const download = await downloaded;
       const name = download.suggestedFilename();
-      expect(name).toMatch(/^iris-soft-matter-clip-.*\.(webm|mp4)$/);
+      expect(name).toMatch(/^iris-soft-matter-clip-.*\.(webm|mp4|mkv)$/);
       const buf = await readFile((await download.path())!);
       // size depends on how many frames a (possibly slow) renderer produced; the
       // real proof is the header check plus the in-browser decode below
       expect(buf.length).toBeGreaterThan(1_000);
-      if (name.endsWith('.webm')) expect(buf.subarray(0, 4).toString('hex')).toBe('1a45dfa3');
+      if (!name.endsWith('.mp4')) expect(buf.subarray(0, 4).toString('hex')).toBe('1a45dfa3'); // EBML (WebM/Matroska)
       else expect(buf.subarray(4, 8).toString('latin1')).toBe('ftyp');
 
       // decode it in the browser to prove it plays
       const b64 = buf.toString('base64');
-      const mime = name.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+      const mime = name.endsWith('.mp4') ? 'video/mp4' : 'video/webm';
       const meta = await page.evaluate(async ({ b64, mime }) => {
         const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
         const v = document.createElement('video');
