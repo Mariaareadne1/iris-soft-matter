@@ -21,7 +21,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `7b2fcb0` | Adaptive render resolution (`?fixedres=1` opts out) + separate three.js chunk |
 | `a2729e7` | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
 | `6a8a854` | Lighter e2e viewport (960×600) + one CI retry |
-| _latest_ | Explicit per-render video frames, aria-labels on icon-only bar buttons, recording test at 480×320 |
+| `82c2814` | Explicit per-render video frames, aria-labels on icon-only bar buttons, recording test at 480×320 — **CI E2E green** (15 passed + 1 passed on retry) |
+| _latest_ | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -53,7 +54,7 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   video export decodes in the browser, clean view, demo, embed in a resizable iframe, mobile
   (Pixel 7) layout + touch tap + touch drag. **16/16 pass in a single local run on the final
   app code** (5.6 min, 960×600 desktop viewport). CI runs the same suite on every push with one
-  retry for slow shared runners.
+  retry for slow shared runners; first green CI run at `82c2814`.
 
 ## Known issues / notes
 - Video recording needs the page to actually render frames: at ~1 fps (software WebGL on CI,
