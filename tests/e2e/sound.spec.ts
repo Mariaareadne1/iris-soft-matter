@@ -60,7 +60,8 @@ test.describe('sound', () => {
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await listen(page, 300);
+    // the meter looks back ~0.7 s: wait until it only covers muted time
+    await listen(page, 1000);
     const before = await audio(page);
     await startPeak(page);
     await page.mouse.click(p.x, p.y);

@@ -25,11 +25,13 @@ matter that feels good to touch.
 **Materials:** Holographic Jelly (default), Liquid Chrome, Pastel Putty, Clear Slime — all on the
 same blob, each with its own optics *and* physics.
 
-**Sound:** the slime makes its own noises, synthesised live from the simulation — a gooey creak
-that rises as you stretch, a squelch while you press, a wet *bloop* when you poke, and a wobbling
-*slurp* when a stretch lets go. Each material has its own voice (chrome rings, putty thuds, clear
-slime is glassy). Toggle it in the play bar or with `M`; volume lives in Customize. Audio starts
-on your first click or tap, as browsers require.
+**Sound:** the slime makes its own noises, synthesised live from the simulation — and, like real
+slime, almost none of it is pitched. Stretching gives a sticky crackle (denser the faster you
+pull), pressing a muffled squelch with little air-pocket pops, a poke a short wet *tck*, and a
+release a wet *shhlp* that keeps crackling for a moment as the surface unsticks. Each material
+has its own texture (clear slime is wettest, putty is dull and dense, chrome is smooth). Toggle it
+in the play bar or with `M`; volume lives in Customize. Audio starts on your first click or tap,
+as browsers require.
 
 **Customize (Studio):** material, color, Stretchiness, Viscosity, Softness, Wobble, Recovery
 speed, Iridescence, Gloss, Background. Every control drives the simulation or the renderer
@@ -59,12 +61,12 @@ recording, and `H` gives a clean view for screen-recording tools.
   morphs into a pinch with a held core, so pulls form a rounded glob on a neck. Pulls are softly
   limited, and the body self-heals if it ever goes non-finite (it never has in testing).
 
-Sound (`src/audio/SlimeAudio.ts`) is pure Web Audio — no samples. Continuous layers (band-passed
-noise and a creaky triangle tone for stretching, low-passed noise for squishing) are driven every
-frame by how far and how fast the body is deforming; one-shots (a rising sine "drop" for pokes, a
-falling, vibrato-wobbled glide plus a noise sweep for releases) fire from interaction events. The
-demo emits the same events, so it sounds like a person playing. The master bus also feeds a
-`MediaStream`, so recorded clips include the sound.
+Sound (`src/audio/SlimeAudio.ts`) is pure Web Audio — no samples, and no audible oscillators:
+everything is shaped noise. Stretch crackle is a granular stream of 3–11 ms band-passed noise
+grains whose density follows how fast the body is deforming; squishes add short resonant
+"air-pocket" blips; pokes and releases are filtered noise bursts and sweeps. The demo emits the
+same events as a person, and the master bus also feeds a `MediaStream`, so recorded clips include
+the sound.
 
 Rendering (`src/render/`) refines each simulated triangle into four on the curved PN-triangle
 patch (20,480 triangles on screen), and a `MeshPhysicalMaterial` with transmission, clearcoat and

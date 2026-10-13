@@ -3,16 +3,20 @@ import type { PresetId } from '../render/presets.ts';
 /**
  * Procedural slime foley, synthesised live with Web Audio — no samples.
  *
- *   stretch  band-passed noise + a creaky triangle "taffy" tone; loudness
- *            follows how fast the body is deforming, pitch how far it is
- *   squish   low, muffled noise while a press is held
- *   poke     a wet "bloop": a rising sine chirp with a soft click
- *   release  a "slurp-boing": a falling, wobbling glide sized by the stretch
+ * Real slime has almost no pitch: it is wet, sticky noise. So every sound
+ * here is shaped noise, never an oscillator:
  *
- * The continuous layers are driven every frame from simulation state, the
- * one-shots from interaction events, so the demo sounds exactly like a
- * person playing. Everything routes through one master bus, which can also
- * feed a MediaStream so recorded clips carry the sound.
+ *   stretch  sticky crackle — a stream of tiny band-passed noise grains, the
+ *            sound of a surface pulling apart, denser the faster you pull,
+ *            over a soft low tearing hiss
+ *   squish   muffled low noise with small air-pocket pops while held
+ *   poke     a short wet "tck" (two filtered bursts) and a couple of bubbles
+ *   release  a downward "shhlp" sweep, a fading trail of crackle as the
+ *            surface separates, and one soft suction pop
+ *
+ * Continuous layers are driven every frame from the simulation, one-shots
+ * from interaction events, so the demo sounds like a person playing. The
+ * master bus also feeds a MediaStream so recorded clips carry the sound.
  */
 export type SlimeSoundEvent =
   | { kind: 'press' }
@@ -29,28 +33,28 @@ export interface SlimeFrameState {
   holding: 'idle' | 'pressing' | 'dragging';
 }
 
-interface Timbre {
-  /** pitch multiplier */
-  pitch: number;
+interface Texture {
   /** filter brightness multiplier */
   bright: number;
-  /** extra metallic partial (0 = none) */
-  ring: number;
-  /** wobble depth on release */
-  wobble: number;
+  /** how wet: scales bubble pops */
+  wet: number;
+  /** how sticky: scales crackle density */
+  sticky: number;
   /** overall level */
   level: number;
 }
 
-const TIMBRES: Record<PresetId, Timbre> = {
-  jelly: { pitch: 1, bright: 1, ring: 0, wobble: 1, level: 1 },
-  chrome: { pitch: 1.55, bright: 1.4, ring: 0.5, wobble: 0.8, level: 0.85 },
-  putty: { pitch: 0.68, bright: 0.5, ring: 0, wobble: 0.35, level: 1.1 },
-  clear: { pitch: 1.2, bright: 1.3, ring: 0.15, wobble: 1.2, level: 0.95 },
+const TEXTURES: Record<PresetId, Texture> = {
+  jelly: { bright: 1, wet: 1, sticky: 1, level: 1 },
+  chrome: { bright: 1.35, wet: 0.45, sticky: 0.55, level: 0.85 }, // smooth, crisp, little bubbling
+  putty: { bright: 0.55, wet: 0.5, sticky: 0.4, level: 1.15 }, // dense, dull, quiet surface
+  clear: { bright: 1.2, wet: 1.4, sticky: 1.15, level: 0.95 }, // wettest, most bubbly
 };
 
-const MASTER_LEVEL = 0.55;
+const MASTER_LEVEL = 1.05;
+const MAX_GRAINS_PER_FRAME = 24;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0));
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 export class SlimeAudio {
   private ctx: AudioContext | null = null;
@@ -59,17 +63,21 @@ export class SlimeAudio {
   private noise: AudioBuffer | null = null;
   private analyser: AnalyserNode | null = null;
   // continuous layers
-  private stretchGain: GainNode | null = null;
-  private stretchFilter: BiquadFilterNode | null = null;
-  private taffyOsc: OscillatorNode | null = null;
-  private taffyGain: GainNode | null = null;
+  private tearGain: GainNode | null = null;
+  private tearFilter: BiquadFilterNode | null = null;
   private squishGain: GainNode | null = null;
   private squishFilter: BiquadFilterNode | null = null;
 
-  private timbre: Timbre = TIMBRES.jelly;
+  private tex: Texture = TEXTURES.jelly;
   private volume = 0.8;
   private muted = false;
   private lastPoke = -Infinity;
+  private lastUpdate = 0;
+  /** fractional grains carried between frames */
+  private crackleDebt = 0;
+  private bubbleDebt = 0;
+  /** lingering stickiness after a release, decays to 0 */
+  private residual = 0;
   /** counts of one-shots actually voiced (for tests and debugging) */
   readonly stats = { pokes: 0, releases: 0, presses: 0 };
 
@@ -95,7 +103,7 @@ export class SlimeAudio {
   }
 
   setPreset(id: PresetId) {
-    this.timbre = TIMBRES[id] ?? TIMBRES.jelly;
+    this.tex = TEXTURES[id] ?? TEXTURES.jelly;
   }
 
   /** A stream carrying the slime's sound, for clip recording. */
@@ -117,28 +125,51 @@ export class SlimeAudio {
     return peak;
   }
 
-  /** Per-frame: drive the continuous stretch and squish layers. */
+  /** Per-frame: drive the continuous layers and the grain streams. */
   update(state: SlimeFrameState) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running' || !this.stretchGain) return;
-    const t = ctx.currentTime;
-    const tb = this.timbre;
+    if (!ctx || ctx.state !== 'running' || !this.tearGain) return;
+    const now = ctx.currentTime;
+    const dt = Math.min(0.1, Math.max(0, now - this.lastUpdate));
+    this.lastUpdate = now;
+    const tx = this.tex;
     const speed = Math.abs(state.deformationSpeed);
-    const holding = state.holding !== 'idle';
-
-    // stretch: only while something is pulling, loudness ∝ how fast it moves
-    const pulling = state.holding === 'dragging';
-    const stretchAmt = pulling ? clamp01(speed / 2.2) : 0;
     const deform = clamp01(state.deformation / 1.6);
-    this.stretchGain!.gain.setTargetAtTime(stretchAmt * 0.5 * tb.level, t, 0.05);
-    this.stretchFilter!.frequency.setTargetAtTime((380 + deform * 1500) * tb.bright, t, 0.06);
-    this.taffyOsc!.frequency.setTargetAtTime((70 + deform * 210) * tb.pitch, t, 0.08);
-    this.taffyGain!.gain.setTargetAtTime(stretchAmt * deform * 0.13 * tb.level, t, 0.06);
+    const pulling = state.holding === 'dragging';
+    const pressing = state.holding === 'pressing';
 
-    // squish: a held press, louder while the dent is still deepening
-    const squish = state.holding === 'pressing' ? clamp01(0.25 + speed / 1.2) : 0;
-    this.squishGain!.gain.setTargetAtTime(squish * 0.22 * tb.level, t, holding ? 0.05 : 0.12);
-    this.squishFilter!.frequency.setTargetAtTime((240 + deform * 500) * tb.bright, t, 0.08);
+    // stretch: a soft low tearing hiss under the crackle
+    const pull = pulling ? clamp01(speed / 2.2) : 0;
+    this.tearGain!.gain.setTargetAtTime(pull * 0.16 * tx.level, now, 0.06);
+    this.tearFilter!.frequency.setTargetAtTime((500 + deform * 900) * tx.bright, now, 0.08);
+
+    // squish: muffled low noise while a press is held
+    const squish = pressing ? clamp01(0.3 + speed / 1.2) : 0;
+    this.squishGain!.gain.setTargetAtTime(squish * 0.2 * tx.level, now, pressing ? 0.05 : 0.1);
+    this.squishFilter!.frequency.setTargetAtTime((220 + deform * 380) * tx.bright, now, 0.08);
+
+    if (this.muted || dt === 0) return;
+
+    // sticky crackle: grains/s rise with pull speed; after a release the
+    // surface keeps separating for a moment (residual)
+    this.residual *= Math.exp(-dt / 0.35);
+    const crackleRate = tx.sticky * (pulling ? 10 + pull * 140 + deform * 25 : 0) + this.residual * 160 * tx.sticky;
+    // air pockets: a held press pops a few small bubbles, more while it deepens
+    const bubbleRate = tx.wet * (pressing ? 2.5 + clamp01(speed / 1.2) * 18 : pulling ? pull * 4 : 0);
+
+    this.crackleDebt += crackleRate * dt;
+    this.bubbleDebt += bubbleRate * dt;
+    let n = 0;
+    while (this.crackleDebt >= 1 && n < MAX_GRAINS_PER_FRAME) {
+      this.crackleDebt -= 1;
+      n++;
+      this.crackle(now + Math.random() * dt, 0.5 + 0.5 * Math.max(pull, this.residual));
+    }
+    this.crackleDebt = Math.min(this.crackleDebt, 4);
+    while (this.bubbleDebt >= 1) {
+      this.bubbleDebt -= 1;
+      this.bubble(now + Math.random() * dt, rand(0.35, 0.8));
+    }
   }
 
   /** One-shots from interaction or the demo. */
@@ -147,14 +178,14 @@ export class SlimeAudio {
     if (!ctx || ctx.state !== 'running' || this.muted) return;
     switch (e.kind) {
       case 'poke':
-        this.bloop(clamp01(e.strength));
+        this.poke(clamp01(e.strength));
         break;
       case 'release':
-        if (e.amount > 0.08) this.slurp(clamp01(e.amount / 1.6));
+        if (e.amount > 0.08) this.shhlp(clamp01(e.amount / 1.6));
         break;
       case 'press':
         this.stats.presses++;
-        this.tick(0.35);
+        this.contact(ctx.currentTime, 0.35);
         break;
       case 'drag':
         break;
@@ -171,13 +202,19 @@ export class SlimeAudio {
   private build() {
     const ctx = new AudioContext({ latencyHint: 'interactive' });
     this.ctx = ctx;
+    this.lastUpdate = ctx.currentTime;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    comp.ratio.value = 4;
-    comp.attack.value = 0.004;
-    comp.release.value = 0.2;
+    comp.threshold.value = -20;
+    comp.ratio.value = 3.5;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.15;
     this.master = ctx.createGain();
-    this.master.connect(comp);
+    // a gentle high cut takes the digital edge off every noise source
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 9000;
+    tone.Q.value = 0.5;
+    this.master.connect(tone).connect(comp);
     comp.connect(ctx.destination);
     this.recordDest = ctx.createMediaStreamDestination();
     comp.connect(this.recordDest);
@@ -186,51 +223,40 @@ export class SlimeAudio {
     comp.connect(this.analyser);
     this.applyMaster();
 
-    // two seconds of white noise, looped by every noise voice
+    // two seconds of slightly pinkened noise, shared by every voice
     const len = ctx.sampleRate * 2;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
     let seed = 1;
+    let last = 0;
     for (let i = 0; i < len; i++) {
       seed = (seed * 16807) % 2147483647;
-      data[i] = (seed / 2147483647) * 2 - 1;
+      const white = (seed / 2147483647) * 2 - 1;
+      last = last * 0.55 + white * 0.45; // tilt away from hiss
+      data[i] = last * 1.6;
     }
 
-    // stretch: noise → resonant band-pass (gooey creak) + taffy triangle
-    const sNoise = this.loopNoise();
-    this.stretchFilter = ctx.createBiquadFilter();
-    this.stretchFilter.type = 'bandpass';
-    this.stretchFilter.Q.value = 7;
-    this.stretchGain = ctx.createGain();
-    this.stretchGain.gain.value = 0;
-    sNoise.connect(this.stretchFilter).connect(this.stretchGain).connect(this.master);
-    // a slow wobble on the band keeps the creak organic
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 7.5;
-    const lfoAmt = ctx.createGain();
-    lfoAmt.gain.value = 140;
-    lfo.connect(lfoAmt).connect(this.stretchFilter.frequency);
-    lfo.start();
-
-    this.taffyOsc = ctx.createOscillator();
-    this.taffyOsc.type = 'triangle';
-    this.taffyOsc.frequency.value = 80;
-    const taffyLp = ctx.createBiquadFilter();
-    taffyLp.type = 'lowpass';
-    taffyLp.frequency.value = 900;
-    this.taffyGain = ctx.createGain();
-    this.taffyGain.gain.value = 0;
-    this.taffyOsc.connect(taffyLp).connect(this.taffyGain).connect(this.master);
-    this.taffyOsc.start();
+    // tearing hiss: noise → low-Q band-pass, slowly wandering
+    this.tearFilter = ctx.createBiquadFilter();
+    this.tearFilter.type = 'bandpass';
+    this.tearFilter.Q.value = 1.8;
+    this.tearGain = ctx.createGain();
+    this.tearGain.gain.value = 0;
+    this.loopNoise().connect(this.tearFilter).connect(this.tearGain).connect(this.master);
+    const drift = ctx.createOscillator(); // modulates a filter, never heard as a tone
+    drift.frequency.value = 0.9;
+    const driftAmt = ctx.createGain();
+    driftAmt.gain.value = 120;
+    drift.connect(driftAmt).connect(this.tearFilter.frequency);
+    drift.start();
 
     // squish: muffled low noise
-    const qNoise = this.loopNoise();
     this.squishFilter = ctx.createBiquadFilter();
     this.squishFilter.type = 'lowpass';
-    this.squishFilter.Q.value = 3;
+    this.squishFilter.Q.value = 1.2;
     this.squishGain = ctx.createGain();
     this.squishGain.gain.value = 0;
-    qNoise.connect(this.squishFilter).connect(this.squishGain).connect(this.master);
+    this.loopNoise().connect(this.squishFilter).connect(this.squishGain).connect(this.master);
   }
 
   private applyMaster() {
@@ -243,115 +269,77 @@ export class SlimeAudio {
     const src = this.ctx!.createBufferSource();
     src.buffer = this.noise;
     src.loop = true;
-    // start each loop at a different offset so layers don't correlate
     src.start(0, Math.random() * 1.9);
     return src;
   }
 
-  /** Short filtered noise burst — the wet contact click under every one-shot. */
-  private tick(level: number, at = this.ctx!.currentTime) {
+  /** A shaped noise burst through one band-pass — the building block. */
+  private burst(at: number, freq: number, q: number, dur: number, level: number, sweepTo?: number) {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 1800 * this.timbre.bright;
-    bp.Q.value = 1.2;
+    bp.Q.value = q;
+    bp.frequency.setValueAtTime(freq, at);
+    if (sweepTo) bp.frequency.exponentialRampToValueAtTime(sweepTo, at + dur);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, at);
-    g.gain.linearRampToValueAtTime(level * 0.18 * this.timbre.level, at + 0.003);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
+    g.gain.linearRampToValueAtTime(level, at + Math.min(0.002, dur * 0.2));
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     src.connect(bp).connect(g).connect(this.master!);
-    src.start(at, Math.random() * 1.8, 0.08);
+    src.start(at, Math.random() * 1.85, dur + 0.02);
   }
 
-  /** Poke: a water-drop style rising chirp with a fast decay. */
-  private bloop(strength: number) {
+  /** One sticky micro-pop: a few milliseconds of bright, band-passed noise. */
+  private crackle(at: number, intensity: number) {
+    const tx = this.tex;
+    this.burst(at, rand(1600, 5200) * tx.bright, rand(2.5, 6), rand(0.003, 0.011), rand(0.06, 0.16) * intensity * tx.level);
+  }
+
+  /** A small air pocket popping inside the gel: a short resonant noise blip that dips. */
+  private bubble(at: number, size: number) {
+    const tx = this.tex;
+    const f = rand(320, 900) * (1.3 - size * 0.6) * tx.bright;
+    this.burst(at, f, rand(5, 10), 0.018 + size * 0.03, (0.1 + size * 0.18) * tx.level, f * 0.7);
+  }
+
+  /** The wet contact of a fingertip on the surface. */
+  private contact(at: number, level: number) {
+    const tx = this.tex;
+    this.burst(at, 650 * tx.bright, 1.4, 0.05, level * 0.32 * tx.level);
+    this.burst(at, 2300 * tx.bright, 2, 0.02, level * 0.14 * tx.level);
+  }
+
+  /** Poke: a short wet "tck" plus a couple of bubbles squeezed out. */
+  private poke(strength: number) {
     const ctx = this.ctx!;
     const now = ctx.currentTime;
     if (now - this.lastPoke < 0.04) return; // debounce doubled events
     this.lastPoke = now;
     this.stats.pokes++;
-    const tb = this.timbre;
-    const base = (170 + Math.random() * 40) * tb.pitch;
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(base, now);
-    osc.frequency.exponentialRampToValueAtTime(base * (2.6 + strength), now + 0.07);
-    const g = ctx.createGain();
-    const peak = (0.25 + 0.45 * strength) * tb.level;
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(peak, now + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-    osc.connect(g).connect(this.master!);
-    osc.start(now);
-    osc.stop(now + 0.25);
-    if (tb.ring > 0) this.ring(base * 2.76, tb.ring * peak * 0.5, now, 0.6);
-    this.tick(0.6 + strength * 0.4, now);
+    const tx = this.tex;
+    this.contact(now, 0.7 + strength * 0.6);
+    // the gel squelching as it is displaced
+    this.burst(now + 0.01, 420 * tx.bright, 1.1, 0.09 + strength * 0.06, (0.18 + strength * 0.2) * tx.level, 260 * tx.bright);
+    const bubbles = Math.round((1 + strength * 2) * tx.wet);
+    for (let i = 0; i < bubbles; i++) this.bubble(now + rand(0.015, 0.11), rand(0.3, 0.75));
+    this.residual = Math.max(this.residual, 0.15 * strength);
   }
 
-  /** Release: a falling glide with a decaying wobble — the slime recoiling. */
-  private slurp(amount: number) {
+  /** Release: a downward wet sweep, trailing crackle, and a soft suction pop. */
+  private shhlp(amount: number) {
     const ctx = this.ctx!;
     const now = ctx.currentTime;
     this.stats.releases++;
-    const tb = this.timbre;
-    const top = (300 + amount * 260) * tb.pitch;
-    const dur = 0.3 + amount * 0.35;
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(top, now);
-    osc.frequency.exponentialRampToValueAtTime(top * 0.32, now + dur);
-    // boing: vibrato that fades as the wobble settles
-    const vib = ctx.createOscillator();
-    vib.frequency.value = 7 + amount * 3;
-    const vibAmt = ctx.createGain();
-    vibAmt.gain.setValueAtTime(top * 0.09 * tb.wobble, now);
-    vibAmt.gain.exponentialRampToValueAtTime(0.01, now + dur);
-    vib.connect(vibAmt).connect(osc.frequency);
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 1400 * tb.bright;
-    const g = ctx.createGain();
-    const peak = (0.18 + 0.32 * amount) * tb.level;
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(peak, now + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    osc.connect(lp).connect(g).connect(this.master!);
-    osc.start(now);
-    vib.start(now);
-    osc.stop(now + dur + 0.05);
-    vib.stop(now + dur + 0.05);
-
-    // the wet "shhlp" of the surface pulling back
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 5;
-    bp.frequency.setValueAtTime(2200 * tb.bright, now);
-    bp.frequency.exponentialRampToValueAtTime(350 * tb.bright, now + dur * 0.8);
-    const ng = ctx.createGain();
-    ng.gain.setValueAtTime(0, now);
-    ng.gain.linearRampToValueAtTime(peak * 0.7, now + 0.01);
-    ng.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.8);
-    src.connect(bp).connect(ng).connect(this.master!);
-    src.start(now, Math.random() * 1.2, dur);
-    if (tb.ring > 0) this.ring(top * 1.9, tb.ring * peak * 0.4, now, 0.9);
-  }
-
-  /** A struck metallic partial (chrome / glass). */
-  private ring(freq: number, level: number, at: number, decay: number) {
-    const ctx = this.ctx!;
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, at);
-    g.gain.linearRampToValueAtTime(level, at + 0.003);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + decay);
-    osc.connect(g).connect(this.master!);
-    osc.start(at);
-    osc.stop(at + decay + 0.05);
+    const tx = this.tex;
+    const dur = 0.22 + amount * 0.3;
+    const peak = (0.2 + 0.3 * amount) * tx.level;
+    this.burst(now, 2400 * tx.bright, 2.2, dur, peak, 380 * tx.bright);
+    this.burst(now + 0.005, 700 * tx.bright, 1.2, dur * 0.7, peak * 0.6, 240 * tx.bright);
+    // suction: the surface letting go, low and short
+    this.burst(now + dur * 0.35, 260 * tx.bright, 7, 0.05, peak * 0.7 * tx.wet, 170 * tx.bright);
+    // the surface keeps unsticking for a moment
+    this.residual = Math.max(this.residual, 0.4 + amount * 0.6);
   }
 }

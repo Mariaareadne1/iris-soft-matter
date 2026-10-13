@@ -25,6 +25,7 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `db8a949` | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
 | `37032c1` | Procedural slime sound + audio in recorded clips; .mkv labelling for Matroska |
 | `ff9c777` | Sound tests robust on slow runners (windowed peak meter) — **CI E2E green** (18 passed, 2 recording tests passed on retry) |
+| _latest_ | Realistic sound: all shaped noise, no tones (granular sticky crackle, air pops, wet tck, shhlp); `scripts/sound-preview.mjs` renders real-time .m4a previews |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -43,8 +44,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   extension matches); "Record demo"; clean view (`H`).
 - Show Demo: scripted grab/pull/release/poke sequence driven through the real simulation.
 - Embed: `?embed=1` (optional `&controls=1`, `&material=`, `&bg=`).
-- Sound (`src/audio/SlimeAudio.ts`): procedural Web Audio — stretch creak, press squelch, poke
-  bloop, release slurp; per-material timbre; toggle in bar / `M`, volume in Studio, `?sound=0`;
+- Sound (`src/audio/SlimeAudio.ts`): procedural Web Audio, all shaped noise (no tones) — sticky
+  stretch crackle, press squelch + air pops, wet poke, release shhlp; per-material texture; toggle in bar / `M`, volume in Studio, `?sound=0`;
   recorded into clips (MP4 AAC or WebM Opus). Preference remembered per viewer.
 - Keyboard: `R` reset, `H` clean view, `D` demo, `M` sound, `Esc` close panel.
 
