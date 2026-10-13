@@ -19,7 +19,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `0aec73d` | Load-tolerant E2E waits, demo test tracks peaks in-page |
 | `d32ea3c` | Playwright E2E suite runs in GitHub Actions on every push |
 | `7b2fcb0` | Adaptive render resolution (`?fixedres=1` opts out) + separate three.js chunk |
-| _latest_ | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
+| `a2729e7` | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
+| _latest_ | Lighter e2e viewport (960×600) + one CI retry: 16/16 locally in one run |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -49,10 +50,9 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   gradual release, drag outside canvas, press-and-hold squish, rough handling, reset, presets
   differ pairwise, studio wiring (physics + renderer + pixels), extreme sliders, PNG export,
   video export decodes in the browser, clean view, demo, embed in a resizable iframe, mobile
-  (Pixel 7) layout + touch tap + touch drag. **All 16 have passed on the final app code** —
-  16/16 in one run at `4f5edaf` under normal load; on `ee34e62`, under heavy machine load, 11 passed
-  in a full run and the other 5 (all wall-clock timeouts, no assertion failures) passed in targeted
-  re-runs after waits were made load-tolerant.
+  (Pixel 7) layout + touch tap + touch drag. **16/16 pass in a single local run on the final
+  app code** (5.6 min, 960×600 desktop viewport). CI runs the same suite on every push with one
+  retry for slow shared runners.
 
 ## Known issues / notes
 - Software GL (SwiftShader) is slow; on a heavily loaded machine (load avg 50–110 during this

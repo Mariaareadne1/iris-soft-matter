@@ -111,7 +111,7 @@ test.describe('capture', () => {
     const buf = await readFile((await download.path())!);
     expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     const png = PNG.sync.read(buf);
-    expect(png.width).toBeGreaterThanOrEqual(1280 * 2);
+    expect(png.width).toBeGreaterThanOrEqual(page.viewportSize()!.width * 2);
     // not a blank frame: the centre differs from the corner
     const at = (x: number, y: number) => {
       const i = (y * png.width + x) * 4;

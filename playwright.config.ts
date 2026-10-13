@@ -11,6 +11,9 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 10_000 },
   workers: 1,
+  // shared CI runners render WebGL in software at wildly varying speeds;
+  // one retry absorbs a slow runner without hiding real failures locally
+  retries: process.env.CI ? 1 : 0,
   fullyParallel: false,
   reporter: [['list']],
   use: {
@@ -25,7 +28,7 @@ export default defineConfig({
     timeout: 120_000,
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } }, testIgnore: /mobile\.spec\.ts/ },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 960, height: 600 } }, testIgnore: /mobile\.spec\.ts/ },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec\.ts/ },
   ],
 });
