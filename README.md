@@ -123,6 +123,7 @@ If you deploy somewhere other than GitHub Pages, update the absolute `og:image`,
 | `controls=1` | With `embed=1`, keep the play bar (materials, reset, capture) |
 | `material=jelly\|chrome\|putty\|clear` | Starting material |
 | `bg=nocturne\|porcelain\|dusk\|void` | Starting background |
+| `fixedres=1` | Turn off adaptive resolution (by default it lowers render resolution on slow GPUs and restores it when there's headroom) |
 
 The canvas tracks its container with a `ResizeObserver`, so any iframe size works. Touch input
 is captured inside the frame (`touch-action: none`), so drags won't scroll the host page.

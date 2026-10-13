@@ -17,6 +17,8 @@ export interface PageOptions {
   embed: boolean;
   /** show the play bar even when embedded */
   controls: boolean;
+  /** disable adaptive resolution (deterministic pixels for tests/recording) */
+  fixedResolution: boolean;
   initial: SlimeSettings;
 }
 
@@ -32,6 +34,7 @@ export function readPageOptions(search: string): PageOptions {
   return {
     embed: flag('embed'),
     controls: flag('controls'),
+    fixedResolution: flag('fixedres'),
     initial: settingsForPreset(isPreset(material) ? material : 'jelly', isBackdrop(bg) ? bg : 'nocturne'),
   };
 }

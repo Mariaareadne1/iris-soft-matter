@@ -9,6 +9,7 @@ import { BACKDROPS, PRESETS, type BackgroundId, type PresetId } from '../render/
 import { Interaction, type InteractionState } from './interaction.ts';
 import { DemoPlayer } from './demo.ts';
 import { ClipRecorder, canvasToPng, type ClipResult } from './capture.ts';
+import { AdaptiveQuality } from './adaptiveQuality.ts';
 
 export interface SlimeSettings {
   preset: PresetId;
@@ -36,6 +37,8 @@ export class SlimeApp {
   private interaction: Interaction;
   private demo: DemoPlayer;
   private recorder = new ClipRecorder();
+  private quality: AdaptiveQuality;
+  private adaptive: boolean;
   private settings: SlimeSettings;
   private clock = new THREE.Clock();
   private elapsed = 0;
@@ -46,7 +49,7 @@ export class SlimeApp {
   onFirstTouch: (() => void) | null = null;
   onDemoChange: ((running: boolean) => void) | null = null;
 
-  constructor(host: HTMLElement, settings: SlimeSettings) {
+  constructor(host: HTMLElement, settings: SlimeSettings, options: { adaptiveQuality?: boolean } = {}) {
     this.settings = settings;
     this.body = new SoftBody({ behavior: settings.behavior });
     this.stage = new Stage(host);
@@ -90,6 +93,13 @@ export class SlimeApp {
     this.controls.minPolarAngle = Math.PI * 0.18;
     this.controls.maxPolarAngle = Math.PI * 0.6;
     this.controls.update();
+
+    this.adaptive = options.adaptiveQuality ?? true;
+    this.quality = new AdaptiveQuality(
+      () => this.stage.currentPixelRatio,
+      () => this.stage.maxPixelRatio,
+      (r) => this.stage.setPixelRatio(r),
+    );
 
     this.apply(settings);
     this.resizeObserver = new ResizeObserver(() => this.stage.resize());
@@ -202,6 +212,8 @@ export class SlimeApp {
       color: `#${m.attenuationColor.getHexString()}`,
       coefficients: { ...this.body.coefficients },
       demoRunning: this.demo.running,
+      pixelRatio: this.stage.currentPixelRatio,
+      frameMs: this.quality.averageFrameMs,
       recording: this.recorder.recording,
     };
   }
@@ -214,7 +226,10 @@ export class SlimeApp {
 
   private tick = () => {
     if (this.disposed) return;
-    const dt = Math.min(this.clock.getDelta(), MAX_FRAME_DT);
+    const frame = this.clock.getDelta();
+    const dt = Math.min(frame, MAX_FRAME_DT);
+    this.quality.frozen = this.recorder.recording || !this.adaptive;
+    this.quality.update(frame);
     this.elapsed += dt;
     this.frameCount++;
 

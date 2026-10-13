@@ -208,7 +208,7 @@ test.describe('demo and embed', () => {
     expect((await inspect(page)).slimeMeshes).toBe(1);
 
     await page.setContent(
-      `<body style="margin:0;background:#fff"><iframe id="f" src="http://localhost:4173/?embed=1" style="width:420px;height:300px;border:0"></iframe></body>`,
+      `<body style="margin:0;background:#fff"><iframe id="f" src="http://localhost:4173/?embed=1&fixedres=1" style="width:420px;height:300px;border:0"></iframe></body>`,
     );
     const frame = page.frameLocator('#f');
     const canvas = frame.locator('canvas');

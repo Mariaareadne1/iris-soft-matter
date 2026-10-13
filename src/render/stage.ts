@@ -184,6 +184,26 @@ export class Stage {
     this.composer.render();
   }
 
+  /** The device's preferred ratio (capped at 2) — the ceiling for adaptive quality. */
+  get maxPixelRatio() {
+    return Math.min(window.devicePixelRatio || 1, 2);
+  }
+
+  get currentPixelRatio() {
+    return this.pixelRatio;
+  }
+
+  /** Change the live render resolution (adaptive quality). */
+  setPixelRatio(ratio: number) {
+    if (Math.abs(ratio - this.pixelRatio) < 0.01) return;
+    const { width, height } = this.size();
+    this.pixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
+    this.composer.setPixelRatio(ratio);
+    this.renderer.setSize(width, height);
+    this.composer.setSize(width, height);
+  }
+
   /** Largest pixel ratio a still can use without exceeding GPU limits. */
   maxStillRatio(wanted: number) {
     const { width, height } = this.size();

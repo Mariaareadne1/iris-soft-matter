@@ -31,7 +31,7 @@ export function App() {
     if (!host) return;
     let app: SlimeApp;
     try {
-      app = new SlimeApp(host, page.initial);
+      app = new SlimeApp(host, page.initial, { adaptiveQuality: !page.fixedResolution });
     } catch (err) {
       console.error('Iris: could not start WebGL', err);
       setFailed('This experiment needs WebGL 2. Try a recent desktop or mobile browser.');

@@ -46,7 +46,10 @@ export async function openApp(page: Page, query = '') {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  await page.goto(`/${query}`);
+  // fixed resolution: adaptive quality would otherwise change pixel density
+  // mid-test on a software renderer and make pixel diffs meaningless
+  const q = query ? `${query}&fixedres=1` : '?fixedres=1';
+  await page.goto(`/${q}`);
   await page.waitForFunction(() => {
     const w = window as unknown as Partial<IrisWindow>;
     return !!w.__iris && w.__iris.metrics().frames > 10;
