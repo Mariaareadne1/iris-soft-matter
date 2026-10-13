@@ -16,7 +16,10 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `baf147b` | Press/pull grab profiles, surface tension, material refinement, visual review scripts |
 | `197087d` | README, social image, touch icon, GitHub Pages workflow (deployed) |
 | `ee34e62` | Review fixes: WebGL context loss on dispose, safe pointer capture, recorder races, capped still size |
-| _latest_ | Load-tolerant E2E waits, demo test tracks peaks in-page, progress update |
+| `0aec73d` | Load-tolerant E2E waits, demo test tracks peaks in-page |
+| `d32ea3c` | Playwright E2E suite runs in GitHub Actions on every push |
+| `7b2fcb0` | Adaptive render resolution (`?fixedres=1` opts out) + separate three.js chunk |
+| _latest_ | Fix e2e download race in the video test (first CI run: 15/16, the 16th was this race) |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -38,7 +41,7 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 - Keyboard: `R` reset, `H` clean view, `D` demo, `Esc` close panel.
 
 ## Tests
-- `npm test` — 22 Vitest physics tests (topology, rest stability, idle, stretch locality, volume,
+- `npm test` — 27 Vitest tests: 22 physics + 5 adaptive-quality controller tests. Physics: (topology, rest stability, idle, stretch locality, volume,
   gradual release, reach limit, dent/bulge, poke recovery, 120 random grabs, extreme settings,
   frame-rate independence, determinism, reset, every behaviour slider has a measurable effect). **All pass.**
 - `npm run test:e2e` — 16 Playwright tests on the production build (SwiftShader WebGL):
@@ -56,12 +59,10 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
   session, from unrelated processes) several E2E tests timed out, so waits were made generous.
   Every test has passed on the final code (see Tests above).
 - Software GL in CI renders ~5–10 fps, so E2E waits on simulation state, not wall time.
-- Bundle is ~700 kB (three.js); acceptable for a single-page experiment.
+- JS: app 89 kB gz + three.js 139 kB gz (separate cached chunk). Fonts are TTF (~160 kB); WOFF2 would halve that.
 - `og:image` / `og:url` point at the GitHub Pages URL; change them if the site moves.
 
 ## Remaining work (nice-to-have)
-- Run Playwright in CI (currently CI runs unit tests + build only; E2E is local).
-- Code-split three.js to shrink first load (~700 kB JS).
 - Optional: plastic memory presets (putty keeping a little of its shape), sound.
 
 ## Blocked

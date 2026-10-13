@@ -122,6 +122,9 @@ test.describe('capture', () => {
 
   test('recording a clip produces a playable, correctly-labelled video', async ({ page }) => {
     await openApp(page);
+    // listen from the start: on a slow renderer the 8 s clip may finish on
+    // its own before the test reaches the Stop button
+    const downloaded = page.waitForEvent('download', { timeout: 120_000 });
     await page.getByRole('button', { name: 'Capture' }).click();
     await page.getByRole('menuitem', { name: /Record 8s clip/ }).click();
     await expect(page.getByRole('status').filter({ hasText: 'REC' })).toBeVisible();
@@ -130,10 +133,10 @@ test.describe('capture', () => {
     await drag(page, top, { x: top.x + 60, y: top.y - 150 }, 15);
     await page.mouse.up();
     await page.waitForTimeout(1200);
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20_000 }),
-      page.getByRole('button', { name: 'Stop' }).click(),
-    ]);
+    const stop = page.getByRole('button', { name: 'Stop' });
+    // the clip may auto-stop at any moment; either way a download follows
+    if (await stop.isVisible()) await stop.click({ timeout: 3_000 }).catch(() => {});
+    const download = await downloaded;
     const name = download.suggestedFilename();
     expect(name).toMatch(/^iris-soft-matter-clip-.*\.(webm|mp4)$/);
     const buf = await readFile((await download.path())!);
