@@ -15,6 +15,9 @@ import { GrainShader, BackdropShader, ShadowShader } from './shaders.ts';
 /** ~24 MP: comfortably within GPU memory for the MSAA + bloom chain */
 const STILL_PIXEL_BUDGET = 24_000_000;
 
+/** gap between the resting form's base and the floor shadow */
+const FLOOR_GAP = 0.42;
+
 export class Stage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -146,12 +149,19 @@ export class Stage {
   }
 
   /** Place the contact shadow under the blob's current footprint. */
-  updateShadow(min: { x: number; y: number; z: number }, max: { x: number; y: number; z: number }) {
+  updateShadow(
+    min: { x: number; y: number; z: number },
+    max: { x: number; y: number; z: number },
+    restBottom = -0.9,
+  ) {
+    // the floor sits a fixed gap below the resting form's base (so a butter
+    // stick casts as grounded a shadow as the blob)
+    const floor = restBottom - FLOOR_GAP;
     const w = Math.max(0.5, max.x - min.x), d = Math.max(0.5, max.z - min.z);
-    this.shadow.position.set((min.x + max.x) / 2, -1.32, (min.z + max.z) / 2);
+    this.shadow.position.set((min.x + max.x) / 2, floor, (min.z + max.z) / 2);
     this.shadow.scale.set(w * 1.5, d * 1.5, 1);
     // fainter as the base lifts off the floor
-    const lift = Math.max(0, min.y + 1.32);
+    const lift = Math.max(0, min.y - floor);
     this.shadow.material.uniforms.uLift.value = Math.min(1, lift / 1.2);
   }
 

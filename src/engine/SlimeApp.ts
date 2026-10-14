@@ -46,6 +46,8 @@ export class SlimeApp {
   private resizeObserver: ResizeObserver;
   private disposed = false;
   private frameCount = 0;
+  /** lowest point of the resting form; the floor sits a little below it */
+  private restFloor: number | null = null;
   private audio = new SlimeAudio();
   private soundOn = true;
   private lastDeformation = 0;
@@ -135,6 +137,12 @@ export class SlimeApp {
     this.settings = settings;
     this.body.setBehavior(settings.behavior);
     const preset = PRESETS[settings.preset] ?? PRESETS.jelly;
+    // the one body changes form (blob ↔ butter stick) by morphing, never by swapping
+    if (preset.shape !== this.body.shape) {
+      this.interaction.cancel();
+      this.body.setShape(preset.shape);
+    }
+    this.body.idle = preset.idle ?? 1;
     this.material.applyLook(preset, settings);
     this.stage.setBackdrop(BACKDROPS[settings.background] ?? BACKDROPS.nocturne);
     this.stage.setEnvironmentIntensity(this.material.envIntensity);
@@ -267,7 +275,8 @@ export class SlimeApp {
     this.geometry.update();
 
     const m = this.body.metrics();
-    this.stage.updateShadow(m.min, m.max);
+    if (this.body.morphing || this.restFloor === null) this.restFloor = restBottom(this.body.rest);
+    this.stage.updateShadow(m.min, m.max, this.restFloor);
     this.updateAudio(m.maxDeviation, dt);
     this.stage.setTime(this.elapsed);
     this.material.uniforms.uTime.value = this.elapsed;
@@ -321,4 +330,10 @@ export class SlimeApp {
     this.material.dispose();
     this.stage.dispose();
   }
+}
+
+function restBottom(rest: Float32Array) {
+  let min = Infinity;
+  for (let i = 1; i < rest.length; i += 3) min = Math.min(min, rest[i]);
+  return min;
 }

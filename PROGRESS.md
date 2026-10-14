@@ -25,7 +25,8 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 | `db8a949` | Video test asserts a decodable file instead of an arbitrary 20 kB minimum |
 | `37032c1` | Procedural slime sound + audio in recorded clips; .mkv labelling for Matroska |
 | `ff9c777` | Sound tests robust on slow runners (windowed peak meter) — **CI E2E green** (18 passed, 2 recording tests passed on retry) |
-| _latest_ | Realistic sound: all shaped noise, no tones (granular sticky crackle, air pops, wet tck, shhlp); `scripts/sound-preview.mjs` renders real-time .m4a previews |
+| `9edcf45` | Realistic sound: all shaped noise, no tones (granular sticky crackle, air pops, wet tck, shhlp); `scripts/sound-preview.mjs` renders real-time .m4a previews |
+| _latest_ | Butter Squishy preset: blob morphs into a printed butter stick, slow-rise foam physics, wrapper print attached to the surface; rest-relative surface tension; `scripts/showcase-clip.mjs` |
 
 ## Current functionality
 - One blob: 2,562 simulated particles → 20,480 rendered triangles (PN-triangle refinement).
@@ -36,8 +37,9 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 - Interaction (`src/engine/interaction.ts`): press = growing dent, drag = soft-selection grab
   with a held core on a camera-facing plane, viscous lag, soft reach limit; quick click = poke
   impulse. Pointer capture keeps drags alive outside the canvas; cancel/blur safe; touch works.
-- Presets: Holographic Jelly (default), Liquid Chrome, Pastel Putty, Clear Slime — each with
-  its own optics and physics, all on the same mesh.
+- Presets: Holographic Jelly (default), Liquid Chrome, Pastel Putty, Clear Slime, Butter Squishy —
+  each with its own optics and physics, all on the same mesh. Butter morphs the body into a
+  printed stick (shape + per-particle label in `src/sim/shapes.ts`, ink in `src/render/butterLabel.ts`).
 - Studio: material, color (8 swatches + picker), Stretchiness, Viscosity, Softness, Wobble,
   Recovery speed, Iridescence, Gloss, Background (4 backdrops). Every control is asserted in E2E.
 - Capture: PNG still at ≥3× pixel ratio; MediaRecorder clip (MP4 if supported else WebM, file
@@ -50,10 +52,10 @@ Done for this session — live at https://mariaareadne1.github.io/iris-soft-matt
 - Keyboard: `R` reset, `H` clean view, `D` demo, `M` sound, `Esc` close panel.
 
 ## Tests
-- `npm test` — 32 Vitest tests: 22 physics + 5 adaptive-quality + 5 clip-format tests. Physics: (topology, rest stability, idle, stretch locality, volume,
+- `npm test` — 37 Vitest tests: 22 physics + 5 shape/morph + 5 adaptive-quality + 5 clip-format tests. Physics: (topology, rest stability, idle, stretch locality, volume,
   gradual release, reach limit, dent/bulge, poke recovery, 120 random grabs, extreme settings,
   frame-rate independence, determinism, reset, every behaviour slider has a measurable effect). **All pass.**
-- `npm run test:e2e` — 20 Playwright tests on the production build (SwiftShader WebGL), incl. 4 sound tests:
+- `npm run test:e2e` — 22 Playwright tests (incl. 2 butter tests) on the production build (SwiftShader WebGL), incl. 4 sound tests:
   launch/no errors/one mesh, poke pixels change, drag stretch is local (bottom moves < 30 % of top),
   gradual release, drag outside canvas, press-and-hold squish, rough handling, reset, presets
   differ pairwise, studio wiring (physics + renderer + pixels), extreme sliders, PNG export,

@@ -25,7 +25,7 @@ const BEHAVIOR_CONTROLS: { key: keyof SlimeBehavior; label: string; low: string;
   { key: 'recovery', label: 'Recovery speed', low: 'Lazy', high: 'Snappy' },
 ];
 
-const SWATCHES = ['#a58cff', '#8fb8ff', '#7fe6ff', '#ff9fd6', '#f3b9cf', '#d7dbe6', '#bfeaff', '#c6f7c9'];
+const SWATCHES = ['#a58cff', '#8fb8ff', '#7fe6ff', '#ff9fd6', '#f3b9cf', '#f7e7a3', '#d7dbe6', '#bfeaff', '#c6f7c9'];
 
 export function StudioPanel({ open, settings, onChange, onPreset, onClose, onDemo, soundOn, volume, onSound, onVolume }: Props) {
   const panelRef = useRef<HTMLElement>(null);

@@ -1,4 +1,5 @@
 import { buildIcosphere } from './icosphere.ts';
+import { buildRestShape, type ShapeId } from './shapes.ts';
 import { deriveCoefficients, DEFAULT_BEHAVIOR, type PhysicalCoefficients, type SlimeBehavior } from './params.ts';
 import { extractRotation, quatScaleAngle, quatToMat3, type Quat } from './rotation.ts';
 
@@ -24,8 +25,8 @@ export interface Vec3 { x: number; y: number; z: number }
 
 export interface SoftBodyOptions {
   subdivisions?: number;
-  /** horizontal/vertical scale of the resting form (slight settle) */
-  squash?: number;
+  /** resting form (default: a settled drop) */
+  shape?: ShapeId;
   behavior?: SlimeBehavior;
 }
 
@@ -75,8 +76,12 @@ export class SoftBody {
   readonly count: number;
   readonly positions: Float32Array;
   readonly triangles: Uint32Array;
+  /** resting positions; changes (smoothly) when the shape changes */
   readonly rest: Float32Array;
-  readonly restVolume: number;
+  /** per particle (u, v, coverage) of the printed label, if the shape has one */
+  readonly label: Float32Array;
+  /** bumped whenever `label` changes, so renderers know to re-upload it */
+  labelVersion = 0;
   /** times the body self-healed from a non-finite state (should stay 0) */
   recoveries = 0;
   /** 0 = perfectly still at rest, 1 = gentle breathing/undulation */
@@ -91,6 +96,7 @@ export class SoftBody {
   private nbrIdx: Uint32Array;
   private idleScale: Float32Array;
   private volGrad: Float32Array;
+  private restLap: Float32Array;
   private coeffs: PhysicalCoefficients;
   private q: Quat = [0, 0, 0, 1];
   private A = new Float64Array(9);
@@ -100,29 +106,25 @@ export class SoftBody {
   private accumulator = 0;
   private time = 0;
   private volumeTarget: number;
+  private restVolume0: number;
+  private unit: Float32Array;
+  private shapeId: ShapeId;
+  private morph: { from: Float32Array; to: Float32Array; t: number; dur: number } | null = null;
 
   constructor(opts: SoftBodyOptions = {}) {
     const topo = buildIcosphere(opts.subdivisions ?? 4);
-    const squash = opts.squash ?? 0.9;
     this.count = topo.positions.length / 3;
     this.triangles = topo.triangles;
     this.edges = topo.edges;
     this.nbrStart = topo.nbrStart;
     this.nbrIdx = topo.nbrIdx;
+    this.unit = topo.positions;
+    this.shapeId = opts.shape ?? 'drop';
 
-    // resting form: a drop that has settled a little — wider than tall,
-    // with a slightly fuller base, so it never reads as a perfect sphere
-    const rest = new Float32Array(topo.positions.length);
-    const hScale = 1 / Math.sqrt(squash);
-    for (let i = 0; i < this.count; i++) {
-      const x = topo.positions[i * 3], y = topo.positions[i * 3 + 1], z = topo.positions[i * 3 + 2];
-      const base = 1 + 0.06 * Math.max(0, -y) * (1 - y * y * 0.5);
-      rest[i * 3] = x * hScale * base;
-      rest[i * 3 + 1] = y * squash;
-      rest[i * 3 + 2] = z * hScale * base;
-    }
-    centerInPlace(rest);
+    const shape = buildRestShape(this.shapeId, this.unit, topo);
+    const rest = shape.positions;
     this.rest = rest;
+    this.label = shape.label;
     this.positions = new Float32Array(rest);
     this.prev = new Float32Array(rest);
 
@@ -136,9 +138,80 @@ export class SoftBody {
     this.edgeRest = new Float32Array(this.edgeRest0);
     this.idleScale = new Float32Array(this.count).fill(1);
     this.volGrad = new Float32Array(this.count * 3);
-    this.restVolume = signedVolume(rest, this.triangles);
-    this.volumeTarget = this.restVolume;
+    this.restLap = new Float32Array(this.count * 3);
+    this.R.set([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    this.computeRestLaplacian();
+    this.restVolume0 = signedVolume(rest, this.triangles);
+    this.volumeTarget = this.restVolume0;
     this.coeffs = deriveCoefficients(opts.behavior ?? DEFAULT_BEHAVIOR);
+  }
+
+  get restVolume() {
+    return this.restVolume0;
+  }
+
+  get shape(): ShapeId {
+    return this.shapeId;
+  }
+
+  get morphing() {
+    return this.morph !== null;
+  }
+
+  /**
+   * Change the resting form. The body morphs into it over `seconds` (the rest
+   * shape glides between the two, and shape matching is boosted meanwhile),
+   * so switching to the butter stick looks like the slime turning into one.
+   */
+  setShape(id: ShapeId, seconds = 0.9) {
+    if (id === this.shapeId && !this.morph) return;
+    const target = buildRestShape(id, this.unit, { nbrStart: this.nbrStart, nbrIdx: this.nbrIdx });
+    this.shapeId = id;
+    this.label.set(target.label);
+    this.labelVersion++;
+    if (seconds <= 0) {
+      this.morph = null;
+      this.applyRest(target.positions);
+      return;
+    }
+    this.morph = { from: new Float32Array(this.rest), to: target.positions, t: 0, dur: seconds };
+  }
+
+  private applyRest(next: Float32Array) {
+    const r = this.rest;
+    r.set(next);
+    const E = this.edges, L0 = this.edgeRest0;
+    for (let e = 0; e < L0.length; e++) {
+      const a = E[e * 2] * 3, b = E[e * 2 + 1] * 3;
+      L0[e] = Math.hypot(r[b] - r[a], r[b + 1] - r[a + 1], r[b + 2] - r[a + 2]);
+    }
+    this.restVolume0 = signedVolume(r, this.triangles);
+    this.computeRestLaplacian();
+  }
+
+  /**
+   * Glide the rest shape toward the target and carry every particle (and its
+   * history, so velocity is untouched) by the same offset. The body morphs
+   * exactly with its rest form — any dent or wobble it had rides along — and
+   * the skin is never stretched against a moving target, so it can't buckle.
+   */
+  private advanceMorph(dt: number) {
+    const m = this.morph;
+    if (!m) return;
+    m.t = Math.min(m.dur, m.t + dt);
+    const k = m.t / m.dur;
+    const e = k * k * (3 - 2 * k);
+    const r = this.rest, p = this.positions, prev = this.prev;
+    const next = new Float32Array(m.from.length);
+    for (let i = 0; i < next.length; i++) {
+      next[i] = m.from[i] + (m.to[i] - m.from[i]) * e;
+      const d = next[i] - r[i];
+      p[i] += d;
+      prev[i] += d;
+    }
+    this.applyRest(next);
+    this.edgeRest.set(this.edgeRest0);
+    if (m.t >= m.dur) this.morph = null;
   }
 
   setBehavior(b: SlimeBehavior) {
@@ -236,10 +309,15 @@ export class SoftBody {
   }
 
   reset() {
+    if (this.morph) {
+      this.applyRest(this.morph.to);
+      this.morph = null;
+    }
     this.positions.set(this.rest);
     this.prev.set(this.rest);
     this.edgeRest.set(this.edgeRest0);
     this.q = [0, 0, 0, 1];
+    this.R.set([1, 0, 0, 0, 1, 0, 0, 0, 1]);
     this.grab = null;
     this.accumulator = 0;
   }
@@ -250,6 +328,7 @@ export class SoftBody {
   step(dt: number) {
     this.accumulator += Math.min(Math.max(dt, 0), MAX_SUBSTEPS * SUBSTEP);
     if (this.accumulator < SUBSTEP) return;
+    this.advanceMorph(Math.min(dt, MAX_SUBSTEPS * SUBSTEP));
     this.updateIdle();
     let n = 0;
     while (this.accumulator >= SUBSTEP && n < MAX_SUBSTEPS) {
@@ -374,8 +453,15 @@ export class SoftBody {
   }
 
   /** Umbrella-operator smoothing: the skin of the slime wants to be minimal. */
+  /**
+   * Umbrella-operator smoothing measured against the resting form: a
+   * particle is pulled toward its neighbours' centre only as far as that
+   * differs from the same offset at rest (rotated with the body). So the
+   * flat faces and edges of a butter stick feel no force at rest, while
+   * dents, creases and tendrils are still smoothed out like a real skin.
+   */
   private applySurfaceTension(k: number) {
-    const p = this.positions, S = this.nbrStart, N = this.nbrIdx;
+    const p = this.positions, S = this.nbrStart, N = this.nbrIdx, L = this.restLap, R = this.R;
     for (let i = 0; i < this.count; i++) {
       const s0 = S[i], s1 = S[i + 1];
       let ax = 0, ay = 0, az = 0;
@@ -385,9 +471,30 @@ export class SoftBody {
       }
       const inv = 1 / (s1 - s0);
       const o = i * 3;
-      p[o] += (ax * inv - p[o]) * k;
-      p[o + 1] += (ay * inv - p[o + 1]) * k;
-      p[o + 2] += (az * inv - p[o + 2]) * k;
+      const lx = L[o], ly = L[o + 1], lz = L[o + 2];
+      const rx = R[0] * lx + R[3] * ly + R[6] * lz;
+      const ry = R[1] * lx + R[4] * ly + R[7] * lz;
+      const rz = R[2] * lx + R[5] * ly + R[8] * lz;
+      p[o] += (ax * inv - p[o] - rx) * k;
+      p[o + 1] += (ay * inv - p[o + 1] - ry) * k;
+      p[o + 2] += (az * inv - p[o + 2] - rz) * k;
+    }
+  }
+
+  /** Each particle's neighbour-centre offset in the resting form. */
+  private computeRestLaplacian() {
+    const r = this.rest, S = this.nbrStart, N = this.nbrIdx, L = this.restLap;
+    for (let i = 0; i < this.count; i++) {
+      const s0 = S[i], s1 = S[i + 1];
+      let ax = 0, ay = 0, az = 0;
+      for (let j = s0; j < s1; j++) {
+        const o = N[j] * 3;
+        ax += r[o]; ay += r[o + 1]; az += r[o + 2];
+      }
+      const inv = 1 / (s1 - s0);
+      L[i * 3] = ax * inv - r[i * 3];
+      L[i * 3 + 1] = ay * inv - r[i * 3 + 1];
+      L[i * 3 + 2] = az * inv - r[i * 3 + 2];
     }
   }
 
@@ -450,7 +557,7 @@ export class SoftBody {
       );
       sc[i] = 1 + breath + wave;
     }
-    this.volumeTarget = this.restVolume * Math.pow(1 + breath, 3);
+    this.volumeTarget = this.restVolume0 * Math.pow(1 + breath, 3);
   }
 
   private checkHealth(): boolean {
@@ -519,12 +626,4 @@ export function signedVolume(p: Float32Array, T: Uint32Array) {
        + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c]);
   }
   return v / 6;
-}
-
-function centerInPlace(p: Float32Array) {
-  const n = p.length / 3;
-  let cx = 0, cy = 0, cz = 0;
-  for (let i = 0; i < p.length; i += 3) { cx += p[i]; cy += p[i + 1]; cz += p[i + 2]; }
-  cx /= n; cy /= n; cz /= n;
-  for (let i = 0; i < p.length; i += 3) { p[i] -= cx; p[i + 1] -= cy; p[i + 2] -= cz; }
 }

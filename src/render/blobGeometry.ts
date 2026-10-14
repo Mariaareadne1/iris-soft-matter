@@ -21,6 +21,8 @@ export class BlobGeometry {
   private strain: Float32Array;
   private posAttr: THREE.BufferAttribute;
   private strainAttr: THREE.BufferAttribute;
+  private labelAttr: THREE.BufferAttribute;
+  private labelVersion = -1;
 
   constructor(private body: SoftBody) {
     const n = body.count;
@@ -71,10 +73,32 @@ export class BlobGeometry {
     this.geometry.setIndex(new THREE.BufferAttribute(index, 1));
     this.geometry.setAttribute('position', this.posAttr);
     this.geometry.setAttribute('aStrain', this.strainAttr);
+    // printed label coordinates ride on the material: they only change when
+    // the body's shape (and so its label) changes
+    this.labelAttr = new THREE.BufferAttribute(new Float32Array(total * 3), 3);
+    this.geometry.setAttribute('aLabel', this.labelAttr);
     this.update();
   }
 
+  /** Copy the body's per-particle label to the refined mesh (midpoints average). */
+  private syncLabel() {
+    const body = this.body;
+    if (this.labelVersion === body.labelVersion) return;
+    this.labelVersion = body.labelVersion;
+    const L = body.label, n = body.count, E = this.edges;
+    const out = this.labelAttr.array as Float32Array;
+    out.set(L);
+    for (let e = 0; e < E.length / 2; e++) {
+      const a = E[e * 2] * 3, b = E[e * 2 + 1] * 3, o = (n + e) * 3;
+      out[o] = (L[a] + L[b]) * 0.5;
+      out[o + 1] = (L[a + 1] + L[b + 1]) * 0.5;
+      out[o + 2] = (L[a + 2] + L[b + 2]) * 0.5;
+    }
+    this.labelAttr.needsUpdate = true;
+  }
+
   update() {
+    this.syncLabel();
     const body = this.body;
     const p = body.positions, n = body.count;
     this.computeSimNormals();

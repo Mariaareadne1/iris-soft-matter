@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Preset } from './presets.ts';
+import { makeButterLabel } from './butterLabel.ts';
 
 /**
  * The slime's skin: a MeshPhysicalMaterial (transmission, clearcoat,
@@ -16,6 +17,8 @@ export interface SlimeUniforms {
   uStrainGlow: THREE.IUniform<number>;
   uCore: THREE.IUniform<number>;
   uCoreColor: THREE.IUniform<THREE.Color>;
+  uLabelMap: THREE.IUniform<THREE.Texture | null>;
+  uLabelOn: THREE.IUniform<number>;
   uPalA: THREE.IUniform<THREE.Color>;
   uPalB: THREE.IUniform<THREE.Color>;
   uPalC: THREE.IUniform<THREE.Color>;
@@ -65,19 +68,20 @@ export class SlimeMaterial {
       uPalB: { value: new THREE.Color('#7f95ff') },
       uPalC: { value: new THREE.Color('#86ecff') },
       uPalD: { value: new THREE.Color('#ffa3dc') },
+      uLabelMap: { value: null },
+      uLabelOn: { value: 0 },
     };
     this.material.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, this.uniforms);
       shader.vertexShader =
-        'attribute float aStrain;\nvarying float vStrain;\nvarying vec3 vObjPos;\n' +
+        'attribute float aStrain;\nattribute vec3 aLabel;\nvarying float vStrain;\nvarying vec3 vObjPos;\nvarying vec3 vLabel;\n' +
         shader.vertexShader.replace(
           '#include <begin_vertex>',
-          '#include <begin_vertex>\n\tvStrain = aStrain;\n\tvObjPos = transformed;',
+          '#include <begin_vertex>\n\tvStrain = aStrain;\n\tvObjPos = transformed;\n\tvLabel = aLabel;',
         );
-      shader.fragmentShader = HOLO_HEADER + shader.fragmentShader.replace(
-        '#include <emissivemap_fragment>',
-        '#include <emissivemap_fragment>\n' + HOLO_BODY,
-      );
+      shader.fragmentShader = HOLO_HEADER + shader.fragmentShader
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + LABEL_BODY)
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + HOLO_BODY);
     };
   }
 
@@ -105,11 +109,15 @@ export class SlimeMaterial {
     this.uniforms.uHolo.value = r.holo * irid;
     this.uniforms.uPalA.value.copy(base);
     this.uniforms.uCore.value = r.core;
+    // printed wrapper (butter): the texture is drawn on first use
+    if (r.label && !this.uniforms.uLabelMap.value) this.uniforms.uLabelMap.value = makeButterLabel();
+    this.uniforms.uLabelOn.value = r.label ? 1 : 0;
     this.uniforms.uCoreColor.value.setHSL(hsl.h, Math.min(1, hsl.s * 1.1), Math.min(0.75, hsl.l * 0.85));
     this.envIntensity = r.envIntensity;
   }
 
   dispose() {
+    this.uniforms.uLabelMap.value?.dispose();
     this.material.dispose();
   }
 }
@@ -124,6 +132,9 @@ uniform float uTime;
 uniform float uBandFreq;
 uniform float uStrainGlow;
 uniform float uCore;
+uniform sampler2D uLabelMap;
+uniform float uLabelOn;
+varying vec3 vLabel;
 uniform vec3 uCoreColor;
 uniform vec3 uPalA;
 uniform vec3 uPalB;
@@ -139,6 +150,17 @@ vec3 filmRamp(float t) {
   else if (t < 3.0) c = mix(uPalC, uPalD, smoothstep(0.0, 1.0, t - 2.0));
   else c = mix(uPalD, uPalA, smoothstep(0.0, 1.0, t - 3.0));
   return c;
+}
+`;
+
+// printed ink: sampled in the label's own coordinates (fixed to the
+// material), so the print stretches and dents with the surface
+const LABEL_BODY = /* glsl */ `
+float inkCover = 0.0; // read later so glow and film never wash out the print
+if (uLabelOn > 0.5) {
+  vec4 ink = texture2D(uLabelMap, clamp(vLabel.xy, 0.0, 1.0));
+  inkCover = ink.a * clamp(vLabel.z, 0.0, 1.0) * 0.96;
+  diffuseColor.rgb = mix(diffuseColor.rgb, ink.rgb, inkCover);
 }
 `;
 
@@ -163,12 +185,12 @@ const HOLO_BODY = /* glsl */ `
   float up = 0.5 + 0.5 * normalize((vec4(normal, 0.0) * viewMatrix).xyz).y;
   float shade = mix(0.45, 1.0, up);
   float energy = ((0.14 + 0.86 * fres) + strain * 0.6 * uStrainGlow) * shade;
-  totalEmissiveRadiance += pal * uHolo * energy * 0.42;
+  totalEmissiveRadiance += pal * uHolo * energy * 0.42 * (1.0 - inkCover);
 
   // light scattered inside the gel: thick face-on regions glow softly,
   // thinning (stretched) regions lose it
   float thick = pow(facing, 1.6) * (1.0 - 0.6 * clamp(strain, 0.0, 1.0));
-  totalEmissiveRadiance += uCoreColor * uCore * thick * shade * 0.35;
+  totalEmissiveRadiance += uCoreColor * uCore * thick * shade * 0.35 * (1.0 - inkCover);
 
   // the film also colours what the surface reflects, not just its glow
   vec3 tinted = diffuseColor.rgb * (0.6 + pal * 0.7);

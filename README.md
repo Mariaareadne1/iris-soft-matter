@@ -23,7 +23,10 @@ matter that feels good to touch.
 | `R` / `H` / `D` / `M` / `Esc` | Reset · clean view · show demo · sound on/off · close panel |
 
 **Materials:** Holographic Jelly (default), Liquid Chrome, Pastel Putty, Clear Slime — all on the
-same blob, each with its own optics *and* physics.
+same blob, each with its own optics *and* physics — plus **Butter Squishy**: the blob morphs into
+a printed stick of butter (a nod to the viral butter squishy) with slow-rise foam physics. Deep
+dents hold for a moment, then creep back, and the "SALTED BUTTER" wrapper print squishes with the
+surface because it's attached to the material, not painted over the screen.
 
 **Sound:** the slime makes its own noises, synthesised live from the simulation — and, like real
 slime, almost none of it is pitched. Stretching gives a sticky crackle (denser the faster you
@@ -57,6 +60,11 @@ recording, and `H` gives a clean view for screen-recording tools.
   distance) and a *viscous* share (moves position and history together → slow creep).
   The resting frame stays mostly anchored, so pulling stretches the blob instead of dragging it.
 - **Laplacian surface tension** — keeps the skin smooth and rounds tendrils.
+- **Shapes and morphing** (`src/sim/shapes.ts`) — every resting form is built from the same
+  particles: the settled drop, or the butter stick (a soft-cornered superellipsoid whose particles
+  are relaxed to even spacing, carrying per-particle label coordinates). Switching glides the rest
+  form and carries each particle with it, so the body morphs without buckling. Surface tension is
+  measured relative to the rest form, so flat faces stay flat.
 - **Soft-selection grab** — a pointer press sinks a peaked, wide bowl; once you drag, the grip
   morphs into a pinch with a held core, so pulls form a rounded glob on a neck. Pulls are softly
   limited, and the body self-heals if it ever goes non-finite (it never has in testing).
@@ -92,9 +100,9 @@ npm run preview    # serve dist/ on http://localhost:4173
 ## Tests
 
 ```bash
-npm test                         # 32 unit tests: physics, quality controller, clip format (Vitest)
+npm test                         # 37 unit tests: physics, shapes & morphing, quality controller, clip format (Vitest)
 npx playwright install chromium  # once
-npm run test:e2e                 # 20 browser tests against the production build
+npm run test:e2e                 # 22 browser tests against the production build
 ```
 
 The physics tests check topology, rest stability, stretch locality, volume preservation, gradual
@@ -137,7 +145,7 @@ If you deploy somewhere other than GitHub Pages, update the absolute `og:image`,
 |---|---|
 | `embed=1` | Hide the wordmark, play bar and Studio; keep the canvas and a fading hint |
 | `controls=1` | With `embed=1`, keep the play bar (materials, reset, capture) |
-| `material=jelly\|chrome\|putty\|clear` | Starting material |
+| `material=jelly\|chrome\|putty\|clear\|butter` | Starting material |
 | `bg=nocturne\|porcelain\|dusk\|void` | Starting background |
 | `sound=0` | Start muted (visitors can still turn sound on) |
 | `fixedres=1` | Turn off adaptive resolution (by default it lowers render resolution on slow GPUs and restores it when there's headroom) |

@@ -1,6 +1,7 @@
 import type { SlimeBehavior } from '../sim/params.ts';
+import type { ShapeId } from '../sim/shapes.ts';
 
-export type PresetId = 'jelly' | 'chrome' | 'putty' | 'clear';
+export type PresetId = 'jelly' | 'chrome' | 'putty' | 'clear' | 'butter';
 
 /** Optical recipe for one material; `gloss` and `iridescence` scale it. */
 export interface MaterialRecipe {
@@ -26,6 +27,8 @@ export interface MaterialRecipe {
   /** absorption colour multiplier: < 1 deepens the colour seen through the body */
   depth: number;
   envIntensity: number;
+  /** print the wrapper label (butter) */
+  label?: boolean;
 }
 
 export interface Preset {
@@ -36,6 +39,10 @@ export interface Preset {
   gloss: number;
   behavior: SlimeBehavior;
   recipe: MaterialRecipe;
+  /** resting form; anything but 'drop' morphs the blob on selection */
+  shape: ShapeId;
+  /** idle breathing/undulation, 0..1 (default 1) — foam barely moves */
+  idle?: number;
   /** swatch gradient for the UI */
   swatch: string;
 }
@@ -43,6 +50,7 @@ export interface Preset {
 export const PRESETS: Record<PresetId, Preset> = {
   jelly: {
     id: 'jelly',
+    shape: 'drop',
     label: 'Holographic Jelly',
     color: '#a58cff',
     iridescence: 0.85,
@@ -70,6 +78,7 @@ export const PRESETS: Record<PresetId, Preset> = {
   },
   chrome: {
     id: 'chrome',
+    shape: 'drop',
     label: 'Liquid Chrome',
     color: '#d7dbe6',
     iridescence: 0.45,
@@ -97,6 +106,7 @@ export const PRESETS: Record<PresetId, Preset> = {
   },
   putty: {
     id: 'putty',
+    shape: 'drop',
     label: 'Pastel Putty',
     color: '#f3b9cf',
     iridescence: 0.25,
@@ -124,6 +134,7 @@ export const PRESETS: Record<PresetId, Preset> = {
   },
   clear: {
     id: 'clear',
+    shape: 'drop',
     label: 'Clear Slime',
     color: '#cdeeff',
     iridescence: 0.4,
@@ -149,9 +160,40 @@ export const PRESETS: Record<PresetId, Preset> = {
     },
     swatch: 'radial-gradient(circle at 35% 30%, #ffffff, #d9f4ff 45%, #9fd6f0)',
   },
+  butter: {
+    id: 'butter',
+    shape: 'stick',
+    idle: 0.15,
+    label: 'Butter Squishy',
+    color: '#f8e083',
+    iridescence: 0,
+    gloss: 0.32,
+    // slow-rise foam: deep dents that hold, then creep back; barely wobbles
+    behavior: { stretchiness: 0.18, viscosity: 0.85, softness: 0.85, wobble: 0.05, recovery: 0.14 },
+    recipe: {
+      metalness: 0,
+      roughness: [0.78, 0.4],
+      transmission: 0,
+      thickness: 0,
+      ior: 1.45,
+      attenuationDistance: Infinity,
+      clearcoat: 0.12,
+      sheen: 0.75,
+      sheenColor: '#fff3c4',
+      iridescence: 0,
+      holo: 0,
+      dispersion: 0,
+      tint: 1,
+      core: 0.45,
+      depth: 1,
+      envIntensity: 1.25,
+      label: true,
+    },
+    swatch: 'linear-gradient(135deg, #fcf2c4, #f2dc8c 60%, #e8cc72)',
+  },
 };
 
-export const PRESET_ORDER: PresetId[] = ['jelly', 'chrome', 'putty', 'clear'];
+export const PRESET_ORDER: PresetId[] = ['jelly', 'chrome', 'putty', 'clear', 'butter'];
 
 export type BackgroundId = 'nocturne' | 'porcelain' | 'dusk' | 'void';
 

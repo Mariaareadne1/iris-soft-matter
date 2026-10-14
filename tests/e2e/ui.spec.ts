@@ -12,7 +12,7 @@ test.describe('materials and studio', () => {
     await openApp(page);
     const clip = await blobClip(page);
     const shots: Buffer[] = [];
-    for (const name of ['Holographic Jelly', 'Liquid Chrome', 'Pastel Putty', 'Clear Slime']) {
+    for (const name of ['Holographic Jelly', 'Liquid Chrome', 'Pastel Putty', 'Clear Slime', 'Butter Squishy']) {
       await page.getByRole('radio', { name }).click();
       await waitFrames(page, 6);
       shots.push(await page.screenshot({ clip }));

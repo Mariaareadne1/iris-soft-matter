@@ -49,6 +49,7 @@ const TEXTURES: Record<PresetId, Texture> = {
   chrome: { bright: 1.35, wet: 0.45, sticky: 0.55, level: 0.85 }, // smooth, crisp, little bubbling
   putty: { bright: 0.55, wet: 0.5, sticky: 0.4, level: 1.15 }, // dense, dull, quiet surface
   clear: { bright: 1.2, wet: 1.4, sticky: 1.15, level: 0.95 }, // wettest, most bubbly
+  butter: { bright: 0.45, wet: 0.2, sticky: 0.12, level: 1.2 }, // dry slow-rise foam: soft, muffled
 };
 
 const MASTER_LEVEL = 1.05;
